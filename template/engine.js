@@ -22,10 +22,18 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     doc.querySelectorAll('glyph').forEach(g => { const u = g.getAttribute('unicode'); if (u != null) F.glyphs[u] = { d: g.getAttribute('d') || '', adv: +(g.getAttribute('horiz-adv-x') || F.adv) }; });
     SFONTS[name] = F;
   }
-  const STROKE_FONT = cfg.strokeFont || 'EMSReadability';
-  const BOLD_FONT = cfg.boldFont || 'EMSTech';
-  const ALL_FONTS = ['EMSReadability', 'EMSTech', 'EMSAllure', 'EMSFelix', 'EMSNixish', 'EMSElfin', 'HersheyScript1'];
-  await Promise.all([...new Set([STROKE_FONT, BOLD_FONT, ...(cfg.strokeFonts || ALL_FONTS)])]
+  // friendly names (Spanish) → font files in fonts/. Any file name works too.
+  const FONT_ALIAS = {
+    clara: 'EMSReadability', plumon: 'EMSTech', moderna: 'ReliefSingleLine', casual: 'EMSFelix', elegante: 'EMSAllure',
+    cursiva: 'HersheyScriptMed', cursivaFina: 'HersheyScript1', maquina: 'EMSNixish', maquinaItalica: 'EMSNixishItalic',
+    infantil: 'EMSElfin', futurista: 'EMSOsmotron', tecnica: 'HersheySans1', tecnicaMedia: 'HersheySansMed',
+    libro: 'HersheySerifMed', libroItalica: 'HersheySerifMedItalic', libroNegrita: 'HersheySerifBold', gotica: 'HersheyGothEnglish',
+    claraItalica: 'EMSReadabilityItalic',
+  };
+  const fontFile = n => FONT_ALIAS[n] || n;
+  const STROKE_FONT = fontFile(cfg.strokeFont || 'clara');
+  const BOLD_FONT = fontFile(cfg.boldFont || 'plumon');
+  await Promise.all([...new Set([STROKE_FONT, BOLD_FONT, ...(cfg.strokeFonts || Object.values(FONT_ALIAS))].map(fontFile))]
     .map(n => loadStrokeFont(n).catch(e => console.warn('stroke font', n, e.message))));
   // narration timing written by tts.py (optional). With narration the clock is real time and transitions don't snap to beats.
   let VO = null;
@@ -43,11 +51,20 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   const sfx = (name, at, o = {}) => SFX.push({ name, t: S(at), dur: o.dur != null ? S(o.dur) : null, gain: o.gain ?? 1, n: o.n });
 
   /* ---------- palette (overridable) ---------- */
-  const PAL = Object.assign({
-    ink: '#2A1F1C', orange: '#D9703F', blue: '#2F62C8', green: '#23885A', red: '#CF3E36', purple: '#6452C4', gray: '#8C857B',
-    chalk: '#F3F0E6', chalkO: '#F5A57B', chalkB: '#A9CBF5', sepia: '#3B2A1A', graphite: '#4A4744', cream: '#FFF6EA',
-    paper: '#ECE9E2', teal: '#5DB8B2',
-  }, cfg.palette || {});
+  // colour themes: 'suave' (default: muted modern inks, pastel chalks), 'clasico' (original saturated school colours)
+  const THEMES = {
+    suave: { ink: '#25303F', blue: '#2F5D9E', red: '#D9594C', green: '#2A8C74', orange: '#D47A2E', purple: '#6E5BB0', gray: '#8B919B',
+             yellow: '#D9A93A', pink: '#D46A8C', teal: '#3E9C9A',
+             chalk: '#F2EFE6', chalkO: '#F4B795', chalkB: '#AFD3EE', chalkY: '#F2DA8E', chalkG: '#A9DCC2', chalkP: '#F0B3C6',
+             sepia: '#3B2A1A', graphite: '#4A4744', cream: '#FFF6EA', paper: '#EEEBE4',
+             wb: '#F7F6F2', gb: '#33554A', bb: '#272C30', sleeve: '#3B4252', hi: '#FFCF5A' },
+    clasico: { ink: '#2A1F1C', orange: '#D9703F', blue: '#2F62C8', green: '#23885A', red: '#CF3E36', purple: '#6452C4', gray: '#8C857B',
+               yellow: '#E8B820', pink: '#D04F86', teal: '#5DB8B2',
+               chalk: '#F3F0E6', chalkO: '#F5A57B', chalkB: '#A9CBF5', chalkY: '#F6E08A', chalkG: '#9FE0B5', chalkP: '#F5A8C4',
+               sepia: '#3B2A1A', graphite: '#4A4744', cream: '#FFF6EA', paper: '#ECE9E2',
+               wb: '#F6F6F2', gb: '#2D4B3B', bb: '#24292B', sleeve: '#3E5C8A', hi: '#FFD23F' },
+  };
+  const PAL = Object.assign({}, THEMES[cfg.theme] || THEMES.suave, cfg.palette || {});
   const INK = PAL.ink;
 
   /* ---------- stage ---------- */
@@ -163,7 +180,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
       <rect x="-12" y="-88" width="24" height="36" rx="3" fill="#C9CDD2" stroke="#8d9299" stroke-width="2"/><path d="M-12,-88 L-8,-290 Q0,-300 8,-290 L12,-88 Z" fill="#B5462E"/></g>`,
   };
   // cfg.hand: false → floating tools (classic look). Otherwise a realistic right hand holds the tool.
-  const HAND = cfg.hand === false ? null : Object.assign({ skin: '#EFC4A0', sleeve: '#3E5C8A', scale: W < Hh ? 0.82 : 0.9, angle: -34 }, cfg.hand || {});
+  const HAND = cfg.hand === false ? null : Object.assign({ skin: '#EFC4A0', sleeve: PAL.sleeve, scale: W < Hh ? 0.82 : 0.9, angle: -34 }, cfg.hand || {});
   const toolEls = {};
   for (const k of [...Object.keys(TOOLS), 'eraser']) {
     const g = el('g', { visibility: 'hidden' }, toolsL);
@@ -253,13 +270,14 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   // size ≈ CSS font-size. '\n' breaks lines. jitter 0..2 = how hand-made the letters wobble.
   let inkSeed = 1;
   function inkWidth(text, size, font, bold) {
+    font = font ? fontFile(font) : (bold ? BOLD_FONT : STROKE_FONT);
     const lines = String(text).split('\n');
     const F = SFONTS[font] || SFONTS[STROKE_FONT] || Object.values(SFONTS)[0], k = size * 0.62 / F.capH;
     return Math.max(...lines.map(l => [...l].reduce((s, ch) => s + (F.glyphs[ch]?.adv ?? F.adv) * k, 0)));
   }
   function ink(parent, x, y, text, { size = 80, color, font, w, anchor = 'middle', rot = 0, lineH = 1.3, jitter = 1, bold = false, maxWidth = W - 140 } = {}) {
     color = color ?? inkFor(parent);
-    font = font || (bold ? BOLD_FONT : STROKE_FONT);
+    font = font ? fontFile(font) : (bold ? BOLD_FONT : STROKE_FONT);
     // never let a line run off the board: shrink to fit (maxWidth: false to disable)
     if (maxWidth) { const mw = inkWidth(text, size, font, bold); if (mw > maxWidth) { const f = maxWidth / mw; size *= f; if (w) w *= Math.max(0.6, f); } }
     const outer = el('g', { transform: `translate(${x},${y}) rotate(${rot})` }, parent);
@@ -705,15 +723,15 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     blueprint(g) { R(g, { fill: '#15335B' }); R(g, { fill: 'url(#bpMinor)' }); R(g, { fill: 'url(#bpMajor)' });
       el('rect', { x: 40, y: 40, width: W - 80, height: Hh - 80, fill: 'none', stroke: '#fff', 'stroke-opacity': .35, 'stroke-width': 3 }, g); },
     whiteboard(g) {
-      R(g, { fill: '#F6F6F2' });
+      R(g, { fill: PAL.wb });
       ghosts(g, '#8a8f96', 0.05, 16, 3);                 // faint ghosts of old, badly erased marker
       el('rect', { x: -60, y: -60, width: W + 120, height: Hh + 120, fill: 'url(#glare)' }, g);
       R(g, { filter: 'url(#grain)', opacity: .18 });
       el('rect', { x: 10, y: 10, width: W - 20, height: Hh - 20, rx: 10, fill: 'none', stroke: '#C4C9CE', 'stroke-width': 20 }, g);
       el('rect', { x: 20, y: 20, width: W - 40, height: Hh - 40, rx: 6, fill: 'none', stroke: '#9AA0A6', 'stroke-width': 2.5 }, g);
     },
-    greenboard(g) { chalkboard(g, '#2D4B3B', '#DDE9DF'); },
-    blackboard(g) { chalkboard(g, '#24292B', '#E3E6E3'); },
+    greenboard(g) { chalkboard(g, PAL.gb, '#DDE9DF'); },
+    blackboard(g) { chalkboard(g, PAL.bb, '#E3E6E3'); },
     solid: color => g => R(g, { fill: color }),
     sunburst(color = '#E8874F', rayColor = '#F29A62') { return g => { R(g, { fill: color }); const rg = el('g', {}, g);
       for (let k = 0; k < 18; k++) { const a1 = k / 18 * Math.PI * 2, a2 = a1 + Math.PI / 36, L = Math.max(W, Hh) * 1.4;
@@ -982,7 +1000,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   function captions() {
     const C = cfg.captions === undefined ? 'karaoke' : cfg.captions;
     if (!VO || !C) return;
-    const o = Object.assign({ y: W < Hh ? Hh * 0.82 : Hh * 0.87, size: W < Hh ? 64 : 52, color: '#FFFFFF', hi: '#FFD23F', stroke: '#1B1512', maxChars: W < Hh ? 22 : 38, font: 'Kalam' }, typeof C === 'object' ? C : {});
+    const o = Object.assign({ y: W < Hh ? Hh * 0.82 : Hh * 0.87, size: W < Hh ? 64 : 52, color: '#FFFFFF', hi: PAL.hi, stroke: '#1B1512', maxChars: W < Hh ? 22 : 38, font: 'Kalam' }, typeof C === 'object' ? C : {});
     const layer = document.getElementById('captions'), chunks = [];
     for (const id of VO.order || Object.keys(VO.scenes)) {
       let cur = [];

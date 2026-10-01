@@ -1,6 +1,6 @@
 ---
 name: video-pizarra-pro
-description: Crea videos animados estilo pizarra (whiteboard animation) sobre cualquier tema, con una mano realista que escribe cada letra trazo a trazo, mezcla de pizarra blanca, verde y negra, borrado real, mascota que actúa, voz en off generada (edge-tts, gratis) sincronizada palabra por palabra, subtítulos karaoke, música y efectos; renderizados a MP4 vertical u horizontal. Incluye también los estilos acuarela, cuaderno/bullet journal y minimal. Úsala siempre que alguien pida "un video animado", "video tipo pizarra/pizarrón", "whiteboard animation", "video explicativo con dibujos", "video con mano que dibuja", "estilo VideoScribe", "reel/TikTok/Short animado sobre X", "video con voz en off explicando X", o quiera explicar un tema, noticia, producto o clase en video corto sin grabarse, aunque no diga "pizarra".
+description: Crea videos animados estilo pizarra (whiteboard animation) sobre cualquier tema, con una mano realista que escribe cada letra trazo a trazo (18 fuentes a mano), mezcla de pizarra blanca, verde y negra, borrado real, mascota que actúa, voz en off natural (local y gratis con Kokoro/Piper, o ElevenLabs/OpenAI/edge-tts si hay clave e internet) sincronizada palabra por palabra, subtítulos karaoke, música y efectos; renderizados a MP4 vertical u horizontal. Incluye también los estilos acuarela, cuaderno/bullet journal y minimal. Úsala siempre que alguien pida "un video animado", "video tipo pizarra/pizarrón", "whiteboard animation", "video explicativo con dibujos", "video con mano que dibuja", "estilo VideoScribe", "reel/TikTok/Short animado sobre X", "video con voz en off explicando X", o quiera explicar un tema, noticia, producto o clase en video corto sin grabarse, aunque no diga "pizarra".
 ---
 
 # video-pizarra-pro
@@ -19,7 +19,7 @@ SK=~/.cache/video-pizarra-pro
 ```
 (Si la carpeta `template/` está junto a este archivo, usa esa ruta como `$SK`.)
 
-Necesita **Node 18+, ffmpeg y Python 3** (`pip install numpy pillow edge-tts`). Revisa con `which node ffmpeg python3` y avisa a la persona si falta algo; no intentes instalar Node o ffmpeg sin preguntarle.
+Necesita **Node 18+, ffmpeg y Python 3** (`pip install numpy pillow kokoro-onnx soundfile sherpa-onnx edge-tts`; en Linux puede requerir `--break-system-packages` o un venv). Revisa con `which node ffmpeg python3` y avisa a la persona si falta algo; no intentes instalar Node o ffmpeg sin preguntarle.
 
 | Carpeta | Para qué |
 |---|---|
@@ -50,7 +50,8 @@ Si el pedido ya trae tema, formato y tono, no hagas la entrevista completa: deci
 - **Tema y la UNA idea** que el espectador debe llevarse. Pide links, notas o datos: los datos correctos importan más que la animación.
 - **Estilo**: pizarra con mano (recomendado; mezcla blanca/verde/negra), acuarela, cuaderno o minimal. Muestra `catalogo-estilos/` si duda.
 - **Formato y duración**: 9:16 para Reels/TikTok/Shorts (default) o 16:9 para YouTube; 30–45 s, 45–60 s (default) o 60–90 s.
-- **Voz**: voz generada (default `es-PE-AlexNeural`; pregunta el país o el público para elegir acento, ver `references/narracion.md`), sin voz (solo música y texto, el modo clásico) o su propia grabación.
+- **Voz**: voz generada (default Kokoro `em_alex`, hombre con acento latino; también hay mujer y acentos de México o Argentina, ver `references/narracion.md`), sin voz (solo música y texto, el modo clásico) o su propia grabación. Si tiene clave de ElevenLabs u OpenAI, se usa sola.
+- **Look**: colores `suave` (default) o `clasico`, o los de su marca; fuentes a mano (ver `catalogo-estilos/fuentes.jpg`).
 - Solo si importa: **personaje** (la mascota por defecto, su logo o personaje, o ninguno), **colores de marca**, **música** (Suno con `SUNO_API_KEY`, su mp3 en `audio/music.mp3`, o solo efectos) y **CTA** (default: seguir + comentar).
 
 Cierra con un resumen en dos grupos: lo que respondió y lo que decidiste por defecto.
@@ -83,10 +84,11 @@ Reglas que vienen de lo que funcionó:
 PROJ=~/Documents/videos/<slug>      # o la carpeta que pida la persona
 mkdir -p "$PROJ" && cp -R "$SK/template/." "$PROJ/" && cd "$PROJ" && npm install
 npx playwright install chromium      # solo la primera vez (el navegador que renderiza)
-python3 tts.py guion.json            # → audio/vo.wav + audio/vo.json y una tabla de duraciones
+python3 tts.py guion.json            # → audio/vo.wav + audio/vo.json, el motor usado y la duración de cada línea
 ```
-- Revisa la tabla: la duración total debe acercarse a la pedida. Si se pasa, recorta frases; no subas la velocidad más de `+12%`.
-- Si `tts.py` avisa que **cayó a espeak-ng**, la voz es robótica y solo sirve para maquetar. Díselo a la persona y vuelve a generar la voz con edge-tts antes del render final (necesita internet; `pip install edge-tts`).
+- `tts.py` elige el mejor motor disponible: ElevenLabs → OpenAI → edge-tts → **Kokoro (local, default real)** → Piper → espeak. La primera vez Kokoro descarga su modelo de GitHub (~350 MB, queda en caché).
+- Revisa la tabla: la duración total debe acercarse a la pedida. Si se pasa, recorta frases; no subas `speed` de 1.1.
+- **Nunca entregues con espeak** (voz robótica). Si la salida dice `espeak`, instala Kokoro (`pip install kokoro-onnx soundfile`) y repite. Si la persona duda de la voz, `python3 tts.py --sample "<una frase del guion>"` genera la misma frase con todas las voces locales para que elija de oído.
 - Para estilos (acuarela/cuaderno/minimal) el flujo es `node guion.mjs && python3 tts.py guion.json` dentro de un proyecto copiado de `template-estilos/` (ver `references/guion-estilos.md`).
 
 ## 5 · Construir las escenas (pizarra)
@@ -104,7 +106,8 @@ Lo esencial:
 - **Espacio seguro**: el contenido va dentro de `SAFE` (con subtítulos, la franja de abajo es de ellos). La mascota mide ~171 × escala px de alto.
 - **Trazos humanos**: `P(g, d, { rough: 2, double: true })` para círculos y subrayados.
 - **Formato horizontal**: `bootVideo(build, { width: 1920, height: 1080 })` y recalcula posiciones.
-- **Marca**: `palette`, `hatches`, `hand: { skin, sleeve }`, `mascotShape` o `image()` con su logo (ver engine-api §2 y §7).
+- **Fuentes y color**: dos fuentes por video (`bold` usa `plumon`; prueba `moderna`, `casual`, `cursiva`, `maquina`… ver la tabla en engine-api §5). En pizarra blanca, tinta `PAL.ink` + un acento por escena; en pizarra de tiza, `PAL.chalk` + un pastel. Nunca amarillo ni pasteles sobre blanco.
+- **Marca**: `theme`, `palette`, `hatches`, `hand: { skin, sleeve }`, `mascotShape` o `image()` con su logo (ver engine-api §2 y §7).
 
 Previsualiza con `npx serve .` y abre `index.html` si quieres verlo en vivo.
 
@@ -130,7 +133,7 @@ Abre `contact.jpg` y revisa: texto cortado o encimado, subtítulos tapando el di
 ## 8 · Entregar
 
 - Envía la versión móvil e indica dónde quedó el master.
-- Resume en 3–5 líneas qué tiene el video. Si la voz salió del respaldo robótico, dilo claramente.
+- Resume en 3–5 líneas qué tiene el video, incluyendo qué motor y qué voz se usaron.
 - Ofrece un **caption** con información extra (contexto, detalle, fuente de cada dato), una pregunta que invite a comentar y hashtags.
 - Para cambios: edita `guion.json` y vuelve a correr `tts.py` si cambia lo que se dice (los `cue()` se reacomodan solos), o edita `scenes.js`; luego repite QA → build. Guarda copias `scenes_vN.js` por versión.
 

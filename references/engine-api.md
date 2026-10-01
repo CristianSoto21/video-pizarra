@@ -42,15 +42,16 @@
 |---|---|---|
 | `speed` | 0.8 | global tempo multiplier |
 | `width`, `height` | 1080, 1920 | 1920×1080 for horizontal |
-| `palette` | see PAL | override colors: `ink, orange, blue, green, red, purple, gray, chalk, chalkO, chalkB, sepia, graphite, cream, paper, teal` |
+| `palette` | theme | override colors: `ink, blue, red, green, orange, purple, gray, yellow, pink, teal` (inks for light boards), `chalk, chalkO, chalkB, chalkY, chalkG, chalkP` (pastel chalks for dark boards), `wb, gb, bb` (board colours), `sleeve`, `hi` (caption highlight), `sepia, graphite, cream, paper` |
 | `hatches` | — | extra hatch fills `{ brand: ['#base', '#lines'] }` → use `H('brand')` |
 | `mascotTheme` | 'orange' | default hatch fill of the mascot |
 | `mascotShape` | blocky critter | custom silhouette (see §7) |
 | `beatsUrl` | audio/beats.json | beat grid |
 | `mode` | 'A' | 'A' = transitions snap to strong beats; anything else = no snapping (always off with narration) |
 | `hand` | realistic hand | `{ skin, sleeve, cuff, scale, angle }` or `false` (floating tools) |
-| `strokeFont` | 'EMSReadability' | default `ink()` font. Also: `EMSTech` (default for `bold`), `EMSAllure`, `EMSFelix`, `HersheyScript1` (script), `EMSNixish` (typewriter-ish), `EMSElfin` (playful) |
-| `boldFont` | 'EMSTech' | font used by `ink(…, { bold: true })` |
+| `theme` | 'suave' | colour theme: `suave` (muted modern inks, pastel chalks, charcoal sleeve) or `clasico` (original saturated colours). `palette` overrides single colours on top |
+| `strokeFont` | 'clara' | default `ink()` font (see the font table in §5) |
+| `boldFont` | 'plumon' | font used by `ink(…, { bold: true })` |
 | `rough` | 0 | default roughness for every `P()` (1–3 = hand-made wobble) |
 | `captions` | 'karaoke' | with narration: karaoke captions; `{ style: 'simple' }`, `{ y, size, color, hi, maxChars, font }` or `false` |
 | `voUrl` | audio/vo.json | narration timing file from `tts.py` |
@@ -85,6 +86,24 @@ ink(g, x, y, text, { size, color, font, w, anchor: 'middle'|'start'|'end', rot, 
 - Lines wider than `maxWidth` (default canvas width − 140) shrink to fit automatically.
 - Accents, ñ, ¿ ¡ are supported. `jitter` 0 = tidy, 2 = messy. Default duration ≈ 0.3 s + 0.075 s per character.
 - Returns `{ paths, outer, width, height, size }`: `outer` is the group to move/scale; `width` helps place things next to it.
+- Colour tips: on white boards use `PAL.ink` for most text and ONE accent per scene (`blue`, `red`, `green`, `purple`, `orange`); on chalkboards use `PAL.chalk` plus one pastel (`chalkO`, `chalkB`, `chalkY`, `chalkG`, `chalkP`). Never yellow or pastels on white.
+
+Fonts (`font:` name; all have accents, ñ, ¿ ¡ — see `catalogo-estilos/fuentes.jpg`):
+| name | look | good for |
+|---|---|---|
+| `clara` (default) | neat print handwriting | supporting lines, explanations |
+| `plumon` (default bold) | chunky marker | headlines, numbers |
+| `moderna` | clean geometric sans (Relief SingleLine) | tech, business, modern brands |
+| `casual` | loose quick handwriting | friendly asides, notes |
+| `elegante` / `cursiva` / `cursivaFina` | connected script | quotes, titles with flair, "historia" |
+| `maquina` / `maquinaItalica` | typewriter | dates, code-ish labels, documents |
+| `infantil` | playful, round | kids, school, fun facts |
+| `futurista` | squared techno | tech, sci-fi, data |
+| `tecnica` / `tecnicaMedia` | engineering lettering | diagrams, labels, blueprint |
+| `libro` / `libroItalica` / `libroNegrita` | serif | serious, history, quotes |
+| `gotica` | blackletter | medieval, dramatic titles (use sparingly) |
+| `claraItalica` | slanted print | emphasis |
+Use 2 fonts per video (one for headlines, one for text), maybe a third for a special moment.
 
 ### SVG text (legacy, still works)
 const t1 = T(g, x, y, 'Texto', { size: 100, color: PAL.orange, anchor: 'middle'|'start', cls: 'hand'|'kalam'|'code', rot: -4, stroke: INK });
