@@ -86,6 +86,7 @@ mkdir -p "$PROJ" && cp -R "$SK/template/." "$PROJ/" && cd "$PROJ" && npm install
 npx playwright install chromium      # solo la primera vez (el navegador que renderiza)
 python3 tts.py guion.json            # → audio/vo.wav + audio/vo.json, el motor usado y la duración de cada línea
 ```
+- Si pidieron un **acento concreto** (mexicano, argentino, de España) o voz de mujer, fíjalo en `guion.json` con la tabla de `references/narracion.md`; el modo auto es latino neutro. Si hay términos en inglés o siglas, agrega `"pron"` para que la voz no los lea mal.
 - `tts.py` elige el mejor motor disponible: ElevenLabs → OpenAI → edge-tts → **Kokoro (local, default real)** → Piper → espeak. La primera vez Kokoro descarga su modelo de GitHub (~350 MB, queda en caché).
 - Revisa la tabla: la duración total debe acercarse a la pedida. Si se pasa, recorta frases; no subas `speed` de 1.1.
 - **Nunca entregues con espeak** (voz robótica). Si la salida dice `espeak`, instala Kokoro (`pip install kokoro-onnx soundfile`) y repite. Si la persona duda de la voz, `python3 tts.py --sample "<una frase del guion>"` genera la misma frase con todas las voces locales para que elija de oído.
@@ -105,6 +106,10 @@ Lo esencial:
 - **Tiempos con voz**: `cue('id', 'palabra')` da el segundo exacto de esa palabra y `seg('id')` el inicio y fin de la línea. Cada escena termina en `seg(id).end` y la transición llena el silencio. Nunca cuentes segundos a mano si hay voz.
 - **Espacio seguro**: el contenido va dentro de `SAFE` (con subtítulos, la franja de abajo es de ellos). La mascota mide ~171 × escala px de alto.
 - **Trazos humanos**: `P(g, d, { rough: 2, double: true })` para círculos y subrayados.
+- **Medir antes de ubicar**: `inkWidth('texto', { size, bold, font })` da el ancho en px (`bold` ocupa ~1.1× el tamaño por carácter); `ink()` igual encoge solo lo que no cabe.
+- **Borrar**: `erase(scene, at, dur, { targets: [texto] })` es lo más seguro. Con caja, `{ x, y, w, h }` es la esquina superior izquierda (el `y` de `ink()` es la línea base: la caja empieza ~0.8×size más arriba).
+- **Duración objetivo**: el final tipo storyboard dura 6.2 s; para clavar la duración pedida, da al CTA `"min"` en `guion.json` y termina el video en `Math.max(t, seg('cta').end + 0.8)`.
+- **Formas que crecen** (barras, cajas): un `P()` con `fill` son dos elementos; mete ambos en un grupo `el('g', {}, g)` y escala el grupo.
 - **Formato horizontal**: `bootVideo(build, { width: 1920, height: 1080 })` y recalcula posiciones.
 - **Fuentes y color**: dos fuentes por video (`bold` usa `plumon`; prueba `moderna`, `casual`, `cursiva`, `maquina`… ver la tabla en engine-api §5). En pizarra blanca, tinta `PAL.ink` + un acento por escena; en pizarra de tiza, `PAL.chalk` + un pastel. Nunca amarillo ni pasteles sobre blanco.
 - **Marca**: `theme`, `palette`, `hatches`, `hand: { skin, sleeve }`, `mascotShape` o `image()` con su logo (ver engine-api §2 y §7).
@@ -116,9 +121,9 @@ Para **estilos** sigue `references/guion-estilos.md` (y `references/historia.md`
 ## 6 · QA visual (obligatorio antes del render final)
 
 ```bash
-node render.mjs --every 1 && python3 contact.py 10     # hoja de contacto → contact.jpg
+node render.mjs --every 1 && python3 contact.py 10     # hoja de contacto → contact.jpg (estilos: python3 contact.py stills contact.jpg 6)
 ```
-Abre `contact.jpg` y revisa: texto cortado o encimado, subtítulos tapando el dibujo, la mano tapando algo que se está diciendo, escenas vacías, elementos fuera de cuadro y legibilidad en un teléfono. Después:
+`render.mjs` imprime con ⚠️ las advertencias del motor; `cue: "x" not found` significa que algo quedó sincronizado al inicio de la línea en vez de a su palabra: corrígelo. Abre `contact.jpg` y revisa: texto cortado o encimado, subtítulos tapando el dibujo, la mano tapando algo que se está diciendo, escenas vacías, elementos fuera de cuadro y legibilidad en un teléfono. Después:
 - `node render.mjs --stills 12.1,12.3,12.5` alrededor de cada transición.
 - Con voz, escoge 3–4 palabras clave de `audio/vo.json` y saca stills en su segundo: lo que esa palabra nombra debe estar dibujándose ahí.
 - Si algo se ve raro, mira `references/lessons.md` (pizarra) o `references/errores.md` (estilos). Corrige y vuelve a revisar.
@@ -127,7 +132,7 @@ Abre `contact.jpg` y revisa: texto cortado o encimado, subtítulos tapando el di
 
 - **Suno** (si hay key): `python3 suno_music.py "<estilo>" "<título>" audio/music.mp3`, instrumental de 95–115 BPM, tranquila si hay voz.
 - **Beats** (solo sin voz): `python3 -m venv .venv && .venv/bin/pip install librosa numpy && .venv/bin/python beats.py audio/music.mp3`.
-- **Render**: `./build.sh <nombre>` → `<nombre>.mp4` (master) y `<nombre>-movil.mp4` (<30 MB). Mezcla efectos sintetizados, música y voz; baja la música cuando se habla y normaliza a −14 LUFS. Tarda ~3–5 min por minuto de video: córrelo en segundo plano y avisa.
+- **Render**: `./build.sh <nombre>` → `<nombre>.mp4` (master) y `<nombre>-movil.mp4` (<30 MB). Mezcla efectos sintetizados, música y voz; baja la música cuando se habla y normaliza a −14 LUFS. Renderiza en paralelo (núcleos − 1); aun así cuenta con ~10–20 s de render por segundo de video en una máquina de 2 núcleos (un video de 60 s puede tardar 15 min). **Córrelo en segundo plano** (`nohup ./build.sh <nombre> > build.log 2>&1 &`) y revisa `build.log` hasta ver `LISTO`; un comando en primer plano puede cortarse por tiempo y dejar un MP4 roto.
 - Si Playwright no encuentra Chromium: `npx playwright install chromium`, o `CHROME_PATH=/ruta/a/chrome ./build.sh <nombre>`.
 
 ## 8 · Entregar

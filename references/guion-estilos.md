@@ -16,6 +16,8 @@ Todos aceptan `dur` (segundos) y `say` (lo que se narra → subtítulos). En tí
 | `steps` | `title`, `items[]` (2–4) | Proceso/método |
 | `cta` | `title`, `sub`, `button` | Cierre con llamada a la acción |
 
+Énfasis con puntuación: la puntuación va dentro de los asteriscos (`¿Cuál empiezas *hoy?*`); `*hoy*?` deja un espacio raro.
+
 Nivel del video: `style`, `format` ('16:9' | '9:16'), `fps` (30), `person` ({photo, look} o false), `mascot`, `captions` (true/false), `words` (ruta a words.json o arreglo), `beats` (ruta a beats.json), `palette` (sobrescribe colores del estilo, p.ej. `{accent:'#00B3A4', bg:'#FFFFFF'}` para la marca), `font` (`{display:'Bebas Neue', body:'Poppins'}`, cualquier fuente de Google Fonts), `mascotColor` ('#hex'), `mascot` también acepta `{image:'assets/logo.png'}` (su logo o personaje como mascota).
 
 ## Escribir un guion que retenga
@@ -32,8 +34,9 @@ Nivel del video: `style`, `format` ('16:9' | '9:16'), `fps` (30), `person` ({pho
 hook 4.5 · statement 3 · compare 5 · list 5 · stat 4 · media 4.5 · quote 4 · steps 5 · chapter 3 · cta 4.5
 
 ## Narración con voz generada (edge-tts)
-1. Escribe `say` en cada escena (las que no tengan `say` quedan como silencio de su `dur`). Voz y velocidad a nivel del video: `voice: 'es-PE-AlexNeural'`, `rate: '+5%'`, `voGap: 0.6`.
+1. Escribe `say` en cada escena (las que no tengan `say` quedan como silencio de su `dur`). Voz a nivel del video: `ttsEngine` ('auto'), `voices: { kokoro: 'em_alex', piper: 'es_MX-claude-high' }`, `speed`, `pron`, `voGap: 0.6` (ver `references/narracion.md` para acentos).
 2. `node guion.mjs && python3 tts.py guion.json` → `audio/vo.wav` + `audio/vo.json`.
 3. Al cargar, `main.js` ajusta cada `dur` a su frase (el `dur` que escribiste queda como mínimo), saca los subtítulos de los tiempos reales de cada palabra y apaga el corte al beat. `./build.sh` mezcla la voz y baja la música mientras se habla.
-4. Si cambias un `say`, vuelve a correr el paso 2. `narration: false` en video.js ignora la voz.
+4. Para que una lista o un contador vaya con la voz, mira los tiempos de las palabras en `audio/vo.json` y ajusta `stagger` / `countDur` de esa escena.
+5. Si cambias un `say`, vuelve a correr el paso 2. `narration: false` en video.js ignora la voz. QA: `node render.mjs --every 1 && python3 contact.py stills contact.jpg 6`. Las fuentes de los estilos vienen en `node_modules/@fontsource` (npm install); una fuente de marca (`font:`) sí necesita Google Fonts.
 Guía para escribir lo que se dice: `references/narracion.md`.

@@ -55,7 +55,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   const THEMES = {
     suave: { ink: '#25303F', blue: '#2F5D9E', red: '#D9594C', green: '#2A8C74', orange: '#D47A2E', purple: '#6E5BB0', gray: '#8B919B',
              yellow: '#D9A93A', pink: '#D46A8C', teal: '#3E9C9A',
-             chalk: '#F2EFE6', chalkO: '#F4B795', chalkB: '#AFD3EE', chalkY: '#F2DA8E', chalkG: '#A9DCC2', chalkP: '#F0B3C6',
+             chalk: '#F2EFE6', chalkO: '#FFC7A3', chalkB: '#B5DAF5', chalkY: '#F2DA8E', chalkG: '#A9DCC2', chalkP: '#F0B3C6',
              sepia: '#3B2A1A', graphite: '#4A4744', cream: '#FFF6EA', paper: '#EEEBE4',
              wb: '#F7F6F2', gb: '#33554A', bb: '#272C30', sleeve: '#3B4252', hi: '#FFCF5A' },
     clasico: { ink: '#2A1F1C', orange: '#D9703F', blue: '#2F62C8', green: '#23885A', red: '#CF3E36', purple: '#6452C4', gray: '#8C857B',
@@ -124,7 +124,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     for (let i = best; i < BEATS.length; i += 4) DOWN.add(i);
     const thr = [...STR].sort((a, b) => b - a)[Math.floor(STR.length * 0.28)];
     STRONG = BEATS.filter((b, i) => STR[i] >= thr);
-  } catch (e) { console.warn('no beats.json: transitions will not snap to the music'); }
+  } catch (e) { if (!VO) console.log('no beats.json: transitions will not snap to the music'); }
   // nudge a transition so its "hit" lands on the nearest strong beat (small window keeps pacing tight)
   function align(t, H) {
     const hit = S(t + H);
@@ -199,6 +199,8 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   // hand-made imperfection: resample a path and nudge it sideways with smooth seeded noise
   let roughSeed = 1;
   function roughen(d, amp = 2, seed = roughSeed++) {
+    const subs = d.split(/(?=[Mm])/).filter(x => x.trim());
+    if (subs.length > 1 && !/m/.test(d)) return subs.map((sd, i) => roughen(sd, amp, seed * 31 + i)).join(' ');
     const tmp = el('path', { d }, defs), L = tmp.getTotalLength(), n = Math.max(8, Math.ceil(L / 9));
     const ph = [hsh(seed) * 6.3, hsh(seed + 1) * 6.3, hsh(seed + 2) * 6.3];
     let out = '', prev = tmp.getPointAtLength(0);
@@ -223,7 +225,9 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     p.setAttribute('stroke-dasharray', len + ' ' + len); p.setAttribute('stroke-dashoffset', len); p._len = len;
     return p;
   }
-  function done(p) { p.setAttribute('stroke-dashoffset', 0); if (p._twin) p._twin.setAttribute('stroke-dashoffset', 0); if (p._fill) p._fill.setAttribute('fill-opacity', p._fo); }
+  function done(p) {
+    if (p._ink) { p.paths.forEach(q => { q.setAttribute('visibility', 'visible'); q.setAttribute('stroke-dashoffset', 0); }); return; }
+    p.setAttribute('stroke-dashoffset', 0); if (p._twin) p._twin.setAttribute('stroke-dashoffset', 0); if (p._fill) p._fill.setAttribute('fill-opacity', p._fo); }
   function draw(p, at, dur, { ease = 'power1.inOut', tool, sound = true } = {}) {
     tool = toolFor(p, tool);
     const a = S(at), d = S(dur);
@@ -286,6 +290,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
       const p = el('path', { d: sub, fill: 'none', stroke: color, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
       const len = p.getTotalLength() || 0.01;
       p.setAttribute('stroke-dasharray', `${len} ${len}`); p.setAttribute('stroke-dashoffset', len); p._len = len;
+      p.setAttribute('visibility', 'hidden');            // tiny strokes (dots, accents) would show as round caps before their turn
       return p;
     };
     let widths;
@@ -323,6 +328,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     t.paths.forEach((p, i) => {
       cur += hop[i];
       const s0 = a0 + cur / total * D, d0 = sl[i] / total * D;
+      tl.set(p, { attr: { visibility: 'visible' } }, s0);
       tl.fromTo(p, { attr: { 'stroke-dashoffset': p._len } }, { attr: { 'stroke-dashoffset': 0 }, duration: d0, ease: 'sine.inOut' }, s0);
       items.push({ node: p, start: s0, dur: d0 });
       cur += sl[i];
@@ -1033,8 +1039,9 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   const V = {
     W, Hh, CX, CY, PAL, INK, H, S, tl, BEAT, MODE, defs, screen: screenL,
     el, P, done, draw, T, write, ink, erase, roughen, VO, cue, seg,
+    inkWidth: (text, { size = 80, font, bold = false } = {}) => inkWidth(text, size, font, bold),   // width in px before placing
     // keep content inside SAFE (phone UI covers the edges; karaoke captions own the band below SAFE.bottom)
-    SAFE: { top: 250, bottom: VO && cfg.captions !== false ? Math.round((W < Hh ? Hh * 0.82 : Hh * 0.87) - (W < Hh ? 90 : 70)) : Hh - 270, left: 60, right: W - 60 }, pop, popIn, type, comic, stamp, stampFx, wobble, specks, mover, jump, bubble, image, sfx, align,
+    SAFE: { top: W < Hh ? 250 : Math.round(Hh * 0.09), bottom: VO && cfg.captions !== false ? Math.round((W < Hh ? Hh * 0.82 : Hh * 0.87) - (W < Hh ? 90 : 70)) : Hh - 270, left: 60, right: W - 60 }, pop, popIn, type, comic, stamp, stampFx, wobble, specks, mover, jump, bubble, image, sfx, align,
     face, emote, arms, wave, blink, wink, hop, wiggle, take,
     mascot, drawMascot, popMascot, person, drawPerson, popPerson,
     newScene, show, hide, camZ, BG, TR, finale, addHatch,

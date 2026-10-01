@@ -14,6 +14,7 @@ guion.json:
   "speed": 1.0,                     # 0.85–1.2 (edge usa "rate": "+6%")
   "lead": 0.3,                      # silencio antes de la primera frase (s)
   "gap": 0.75,                      # silencio entre escenas (s): ahí caen las transiciones
+  "pron": {"data lake": "deita leik", "AWS": "a doble u ese"},   # cómo debe SONAR; los subtítulos muestran lo escrito
   "scenes": [
     {"id": "s1", "say": "¿Sabías que tu dinero puede trabajar por ti?"},
     {"id": "s2", "say": "Se llama interés compuesto.", "gap": 0.4, "min": 4.5},
@@ -254,9 +255,18 @@ def pick_engine(spec, forced=None):
     raise SystemExit('ningún motor de voz funcionó')
 
 
-def synth_line(eng, text):
-    """One narration line → (audio, words relative to the line start)."""
-    if eng.words_native:
+def pron_fn(spec):
+    """Spoken-form replacements (English terms, acronyms) — captions keep the written form."""
+    pairs = sorted((spec.get('pron') or {}).items(), key=lambda kv: -len(kv[0]))
+    def f(t):
+        for a, b in pairs: t = re.sub(r'(?<!\w)' + re.escape(a) + r'(?!\w)', b, t, flags=re.I)
+        return t
+    return f
+
+
+def synth_line(eng, text, speak=lambda t: t):
+    """One narration line → (audio, words relative to the line start). `speak` maps written → spoken text."""
+    if eng.words_native and speak(text) == text:
         x, words = eng.say(text)
         x, cut = trim(x)
         if not words: return x, spread(text.split(), 0, len(x) / SR)
@@ -270,7 +280,7 @@ def synth_line(eng, text):
     pieces, words, t = [], [], 0.0
     cs = chunks(text)
     for i, c in enumerate(cs):
-        x, _ = eng.say(c); x, _ = trim(x)
+        x, _ = eng.say(speak(c)); x, _ = trim(x)
         d = len(x) / SR; words += spread(c.split(), t, t + d); pieces.append(x); t += d
         if i < len(cs) - 1: p = pause_after(c); pieces.append(np.zeros(int(p * SR))); t += p
     return np.concatenate(pieces), words
@@ -313,7 +323,7 @@ def main():
             out['order'].append(sc['id']); cursor += d + float(sc.get('gap', gap)); continue
         text = sc['say'].strip()
         line_eng = eng if not sc.get('voice') else ENGINES[name](sc['voice'], {**spec, **sc})   # a second character's voice
-        x, words = synth_line(line_eng, text)
+        x, words = synth_line(line_eng, text, pron_fn(spec))
         d, start = len(x) / SR, cursor
         out['scenes'][sc['id']] = {'start': round(start, 3), 'end': round(start + d, 3), 'text': text,
                                    'words': [{'w': w['w'], 's': round(start + w['s'], 3), 'e': round(start + min(w['e'], d), 3)} for w in words]}

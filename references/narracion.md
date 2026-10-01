@@ -1,4 +1,4 @@
-# Narración (voz en off con edge-tts)
+# Narración (voz en off)
 
 La voz manda el ritmo del video: cada escena dura lo que dura su frase, y cada trazo cae en la palabra que lo nombra.
 
@@ -65,6 +65,18 @@ Voces (`python3 tts.py --voices` para ver todas):
 | edge | `es-PE-AlexNeural` / `es-PE-CamilaNeural` | Perú |
 | edge | `es-MX-JorgeNeural` / `es-MX-DaliaNeural` | México |
 | openai | `onyx`, `ash` / `coral`, `nova` | hombre / mujer |
+
+**Acento pedido → voz:** si piden un acento concreto, fíjalo en `guion.json` (el modo `auto` elige Kokoro, que es latino neutro):
+| Pide… | Usa |
+|---|---|
+| latino neutro / no dice | auto (Kokoro `em_alex` hombre · `ef_dora` mujer) |
+| mexicano | `"engine": "piper", "voices": {"piper": "es_MX-claude-high"}` (o `es_MX-ald-medium`); con internet abierto, edge `es-MX-JorgeNeural` |
+| argentino | piper `es_AR-daniela-high` (mujer); edge `es-AR-TomasNeural` |
+| español de España | piper `es_ES-davefx-medium`; o kokoro con `"lang": "es"` |
+| peruano / colombiano | solo edge-tts (`es-PE-…`, `es-CO-…`) con internet abierto; si no, Kokoro (latino neutro) y avisa |
+| mujer | kokoro `ef_dora` o piper `es_AR-daniela-high` |
+
+**Términos en inglés y siglas:** las voces locales leen "data lake" como "dáta láke". Usa `"pron"` en `guion.json`: `{"data lake": "deita leik", "data warehouse": "deita uérjaus", "AWS": "a doble u ese"}`. La voz dice la versión fonética y los subtítulos y `cue()` siguen usando lo escrito (`cue('s2', 'lake')` funciona).
 
 `python3 tts.py --sample "una frase del guion"` genera la misma frase con todas las voces locales en `audio/muestras/` para que la persona elija de oído.
 

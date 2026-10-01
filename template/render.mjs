@@ -1,13 +1,15 @@
 // Deterministic frame-by-frame renderer: seeks the GSAP timeline, screenshots the SVG, pipes JPEGs to ffmpeg.
-//   node render.mjs out.mp4 [--fps 30] [--mode A]      full video (no audio)
+//   node render.mjs out.mp4 [--fps 30] [--mode A] [--workers N]   full video (no audio); N parallel browser pages
+//                                                       (default: CPU cores − 1, max 6; each renders a slice, then they're joined)
 //   node render.mjs --every 1.5                         QA stills every 1.5 s → stills/
 //   node render.mjs --stills 3.2,10,24.5                QA stills at given seconds → stills/
 // Also writes sfx.json (sound events) and hits.json (transition hits) for the audio mix.
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { cpus } from 'node:os';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -32,13 +34,18 @@ async function launch() {
   }
 }
 const browser = await launch();
-const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-page.on('pageerror', e => console.error('PAGE ERROR', e.message));
-await page.goto(`http://localhost:${server.address().port}/index.html?render=1&mode=${mode}`);
-await page.waitForFunction(() => window.READY === true, null, { timeout: 60000 });
-const [vw, vh] = await page.evaluate(() => [window.VW, window.VH]);
-await page.setViewportSize({ width: vw, height: vh });
-const svg = await page.$('#stage');
+async function openPage(log) {
+  const pg = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
+  pg.on('pageerror', e => console.error('PAGE ERROR', e.message));
+  // engine warnings matter (e.g. "cue: … not found" = an element timed to a word the voice never says)
+  if (log) pg.on('console', m => { if (['warning', 'error'].includes(m.type()) && !/Failed to load resource|favicon/.test(m.text())) console.warn('⚠️ ', m.text()); });
+  await pg.goto(`http://localhost:${server.address().port}/index.html?render=1&mode=${mode}`);
+  await pg.waitForFunction(() => window.READY === true, null, { timeout: 90000 });
+  const [vw, vh] = await pg.evaluate(() => [window.VW, window.VH]);
+  await pg.setViewportSize({ width: vw, height: vh });
+  return { pg, svg: await pg.$('#stage') };
+}
+const { pg: page, svg } = await openPage(true);
 const duration = await page.evaluate(() => window.DURATION);
 await writeFile('sfx.json', JSON.stringify(await page.evaluate(() => window.SFX || [])));
 await writeFile('hits.json', JSON.stringify(await page.evaluate(() => window.HITS || [])));
@@ -55,16 +62,30 @@ if (stills) {
 } else {
   const file = out || 'video.mp4';
   const frames = Math.ceil(duration * fps);
-  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', file], { stdio: ['pipe', 'inherit', 'inherit'] });
-  const t0 = Date.now();
-  for (let f = 0; f < frames; f++) {
-    await page.evaluate(t => window.renderAt(t), f / fps);
-    const buf = await svg.screenshot({ type: 'jpeg', quality: 92 });
-    if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
-    if (f % 300 === 0) console.log(`frame ${f}/${frames} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
+  const N = Math.max(1, Math.min(Number(opt('--workers', Math.min(6, Math.max(1, cpus().length - 1)))), Math.ceil(frames / 60)));
+  const t0 = Date.now(); let doneFrames = 0, lastLog = 0;
+  async function slice(k, pg, sv) {
+    const a = Math.floor(frames * k / N), b = Math.floor(frames * (k + 1) / N), part = N > 1 ? `_part${k}_${file}` : file;
+    const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', '-',
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', part], { stdio: ['pipe', 'inherit', 'inherit'] });
+    for (let f = a; f < b; f++) {
+      await pg.evaluate(t => window.renderAt(t), f / fps);
+      const buf = await sv.screenshot({ type: 'jpeg', quality: 92 });
+      if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
+      if (++doneFrames - lastLog >= 300) { lastLog = doneFrames; console.log(`frame ${doneFrames}/${frames} (${((Date.now() - t0) / 1000).toFixed(0)}s, ${N} workers)`); }
+    }
+    ff.stdin.end(); await new Promise(r => ff.on('close', r));
+    return part;
   }
-  ff.stdin.end(); await new Promise(r => ff.on('close', r));
-  console.log('done', file, duration.toFixed(2) + 's');
+  const pages = [{ pg: page, svg }];
+  for (let k = 1; k < N; k++) pages.push(await openPage(false));
+  const parts = await Promise.all(pages.map((p, k) => slice(k, p.pg, p.svg)));
+  if (N > 1) {   // join the slices without re-encoding
+    await writeFile('_parts.txt', parts.map(p => `file '${p}'`).join('\n'));
+    await new Promise((res, rej) => spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', '_parts.txt', '-c', 'copy', '-movflags', '+faststart', file], { stdio: 'inherit' })
+      .on('close', c => c ? rej(new Error('concat failed')) : res()));
+    for (const p of [...parts, '_parts.txt']) await unlink(p).catch(() => {});
+  }
+  console.log('done', file, duration.toFixed(2) + 's', `(${((Date.now() - t0) / 1000).toFixed(0)}s render)`);
 }
 await browser.close(); server.close();
