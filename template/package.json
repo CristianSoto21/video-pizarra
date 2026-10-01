@@ -4,6 +4,9 @@
   "type": "module",
   "dependencies": {
     "gsap": "^3.12.5",
-    "playwright": "^1.47.0"
+    "playwright": "^1.47.0",
+    "@fontsource/caveat": "^5.0.0",
+    "@fontsource/kalam": "^5.0.0",
+    "@fontsource/jetbrains-mono": "^5.0.0"
   }
 }

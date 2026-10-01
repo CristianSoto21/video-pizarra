@@ -1,0 +1,15 @@
+{
+  "voice": "es-PE-AlexNeural",
+  "rate": "+6%",
+  "lead": 0.3,
+  "gap": 0.75,
+  "scenes": [
+    {"id": "hook",   "say": "¿Cuánto tarda tu dinero en duplicarse? Hay un truco que usan los banqueros."},
+    {"id": "regla",  "say": "Se llama la regla del setenta y dos."},
+    {"id": "formula","say": "Divide setenta y dos entre la tasa de interés anual, y te da los años."},
+    {"id": "ej8",    "say": "Al ocho por ciento anual, tu dinero se duplica en nueve años.", "gap": 0.35},
+    {"id": "ej12",   "say": "Y al doce por ciento, en solo seis."},
+    {"id": "giro",   "say": "Pero ojo: la inflación también usa esta regla. Al seis por ciento, tus ahorros valen la mitad en doce años."},
+    {"id": "cta",    "say": "Guarda este video y cuéntame en los comentarios qué tasa te pagan.", "min": 6.5}
+  ]
+}

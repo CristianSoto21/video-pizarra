@@ -22,7 +22,16 @@
 | Archivo de 150–200 MB | la línea "viva" y el grano cambian cada cuadro | usa la copia `-movil.mp4` (2 pasadas a 2.6 Mbps) para compartir |
 | Audio bajo en redes | mezcla sin normalizar | `build.sh` ya aplica `loudnorm` a −14 LUFS |
 
+| Letras de un titular faltan o salen rotas | (versión anterior con opentype.js) los glifos con tilde corrompían otras letras | `ink()` usa fuentes de un solo trazo; no reintroduzcas fuentes de contorno para escribir |
+| Texto cortado por los bordes | línea demasiado larga para 1080 px | `ink()` ya encoge a `maxWidth`; con `T()` mide (Kalam 60 ≈ 28 px por carácter) |
+| Subtítulos encima del dibujo o del personaje | contenido por debajo de `SAFE.bottom` (~1475 px en vertical con subtítulos) | sube el contenido; la franja de abajo es de los subtítulos |
+| Un trazo aparece antes de que la voz lo diga | `cue()` no encontró la palabra y devolvió el inicio de la línea | revisa la consola (`cue: … not found`) y usa otro término o un prefijo |
+| La mano tapa lo que se está diciendo | texto escrito justo a la derecha de algo importante | escribe de izquierda a derecha y de arriba abajo; la mano entra desde abajo a la derecha |
+| Video negro o con Comic Sans al renderizar | las fuentes venían de Google Fonts | ya vienen en el proyecto (`npm install` las trae); no vuelvas a enlazar Google Fonts |
+
 ## QA que sí atrapa errores
 - Hoja de contacto cada 1.2 s de todo el video.
 - Capturas cada 0.2 s alrededor de cada transición (usa `hits.json` para saber dónde caen).
 - Revisa el primer cuadro (¿aparece algo en <0.5 s?) y el último (¿se lee el CTA?).
+- Con narración: escoge 3–4 palabras clave de `audio/vo.json` y saca stills justo en su `s`; lo que esa palabra nombra debe estar dibujándose en ese cuadro.
+- Revisa que ningún texto quede debajo de la mano al terminar de escribir (la mano sale en ~0.3 s; si el texto es corto, igual se lee).

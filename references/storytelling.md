@@ -42,7 +42,14 @@ Evita: intros de contexto, logos, "en este video te voy a explicar…", escenas 
 | "paso 1, 2, 3" | el personaje recorre un camino dibujado; cada paso es una parada |
 | "mito vs. realidad" | tarjeta que se voltea (TR.flip) |
 
+## Con narración (voz en off)
+- La voz cuenta la historia y la pizarra muestra la palabra clave: nunca escribas la frase completa que se está diciendo.
+- Cada elemento aparece en la palabra que lo nombra (`cue()`); así el espectador siente que la mano escribe mientras le hablan.
+- Una pizarra puede durar varias líneas de voz; bórrala por partes (`erase`) cuando el contenido cambia (un número, un antes/después).
+- Duración: ~2.5 palabras por segundo. La estructura de arriba sigue valiendo, pero cada fila es una línea de `guion.json`.
+
 ## Fondos y herramientas (varía por escena)
+Pizarras (con su herramienta automática): **blanca + plumón** (explicar, fórmulas, listas) · **verde + tiza** (escuela, conceptos, "la regla") · **negra + tiza** (datos, revelaciones, contraste). Alterna una pizarra blanca con una de tiza para que el cambio se note; `TR.boardSlide` es la transición natural entre ellas.
 papel + plumón · pizarrón + gis · pergamino + pluma (historia, "antes") · cuadrícula sin herramienta (datos, gráficas) · color sólido con rayos y tipografía cinética (energía, velocidad) · cuaderno + lápiz (listas, tareas) · azul sólido con tecleo (chat, conversación) · cartón kraft + pincel y sellos (precios, mercado) · blueprint con líneas que se dibujan solas (técnico, seguridad).
 Abre y cierra en el mismo fondo (efecto de libro que se cierra).
 

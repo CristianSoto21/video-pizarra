@@ -6,7 +6,7 @@ NAME=${1:-video}
 PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
 node render.mjs "_$NAME-silent.mp4"
 ARGS=""; [ -f audio/music.mp3 ] && ARGS="$ARGS --music audio/music.mp3"
-VO=$(ls audio/vo.* 2>/dev/null | head -1 || true); [ -n "$VO" ] && ARGS="$ARGS --vo $VO"
+VO=$(ls audio/vo.wav audio/vo.mp3 audio/vo.m4a 2>/dev/null | head -1 || true); [ -n "$VO" ] && ARGS="$ARGS --vo $VO"
 $PY sfx_mix.py "audio/_$NAME-mix.wav" $ARGS
 ffmpeg -y -v error -i "_$NAME-silent.mp4" -i "audio/_$NAME-mix.wav" -af "loudnorm=I=-14:TP=-1.5:LRA=11" -ar 44100 \
   -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart "$NAME.mp4"

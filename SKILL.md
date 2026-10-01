@@ -1,131 +1,138 @@
 ---
-name: video-pizarra
-description: Crea videos animados estilo pizarrón / dibujo a mano (whiteboard) sobre CUALQUIER tema — con una mascota que actúa, texto escrito a plumón/gis/lápiz, fondos distintos por escena, transiciones creativas al ritmo de la música, efectos de sonido y un final tipo storyboard — todo generado con código (SVG + GSAP) y renderizado a MP4 vertical u horizontal. Incluye además 4 estilos extra (acuarela, acuarela viva, cuaderno/bullet journal y minimal blanco) con otro motor por código. Todo es personalizable: colores y tipografía de marca, su logo o personaje como mascota, su foto, sus capturas, su voz, formato e idioma. Si el pedido ya trae lo necesario arranca directo; si no, entrevista solo lo que falte (tema, fuentes, formato, personaje, música, CTA). Úsalo cuando alguien pida "un video animado", "video tipo pizarrón", "whiteboard animation", "video explicativo animado", "video con dibujos", "video de noticia animado", "reel animado sobre X", "hazme un video de [tema] con una mascota", o quiera explicar un tema/noticia/lanzamiento/concepto en video corto sin grabarse, aunque no diga "pizarrón".
+name: video-pizarra-pro
+description: Crea videos animados estilo pizarra (whiteboard animation) sobre cualquier tema, con una mano realista que escribe cada letra trazo a trazo, mezcla de pizarra blanca, verde y negra, borrado real, mascota que actúa, voz en off generada (edge-tts, gratis) sincronizada palabra por palabra, subtítulos karaoke, música y efectos; renderizados a MP4 vertical u horizontal. Incluye también los estilos acuarela, cuaderno/bullet journal y minimal. Úsala siempre que alguien pida "un video animado", "video tipo pizarra/pizarrón", "whiteboard animation", "video explicativo con dibujos", "video con mano que dibuja", "estilo VideoScribe", "reel/TikTok/Short animado sobre X", "video con voz en off explicando X", o quiera explicar un tema, noticia, producto o clase en video corto sin grabarse, aunque no diga "pizarra".
 ---
 
-# video-pizarra
+# video-pizarra-pro
 
-Convierte cualquier tema en un video animado de ~60–75 s que se siente dibujado a mano: una mascota que actúa, frases escritas en vivo, cada escena con su propio fondo y herramienta, transiciones que conectan una escena con la siguiente y caen en el beat de la música.
+Convierte un tema en un video de 30–90 s que se siente dibujado a mano frente a cámara: una mano que escribe y borra en la pizarra, una voz que explica, y cada trazo cayendo en la palabra que lo nombra.
 
-Todo el motor ya está hecho en `template/`. Tu trabajo es **entender bien el video que la persona quiere**, escribir una historia clara y construir las escenas con el API del motor. No reescribas el motor.
+El motor ya está hecho. Tu trabajo es **entender el video que la persona quiere, escribir un buen guion y montarlo con el API del motor**. No reescribas el motor; si algo falta, agrégalo en el `scenes.js` del proyecto.
 
-## Todo se puede personalizar (no le digas "no se puede")
+## 0 · Preparar (una vez por máquina, rápido después)
 
-El skill es un punto de partida, no un molde. Si la persona pide algo que no viene de fábrica, adáptalo: cambia la configuración, edita el estilo o escribe una escena nueva con el API del motor. Lo único que no negocias es la calidad (texto legible, datos reales, QA antes de entregar).
+Los archivos de la skill viven en un repositorio. Si junto a este SKILL.md no hay una carpeta `template/`, descárgalo:
 
-| Quiere… | Pizarrón (`template/`) | Estilos (`template-estilos/`) |
-|---|---|---|
-| Colores de su marca | `palette` y `hatches` en la config | `palette: { accent: '#hex', bg: '#hex' }` |
-| Su tipografía | fuentes en `engine-api.md` | `font: { display: 'Bebas Neue', body: 'Poppins' }` (cualquier fuente de Google Fonts) |
-| Su mascota o personaje | `mascotShape` (silueta propia) o `image()` con su PNG | `mascot: 'clawd' \| 'bot' \| 'blob'`, `mascotColor: '#hex'`, o su logo/personaje: `mascot: { image: 'assets/logo.png' }` |
-| Salir él/ella | — | `person: { photo }` (`cutout.py foto.jpg`) o personaje dibujado con su `look` |
-| Sus imágenes, logos, capturas | `image()` | escenas `media`, `sticker`, `shotCard` (ver `references/historia.md`) |
-| Formato / duración | 9:16 o 16:9, cualquier duración | igual |
-| Su voz, su música o nada | `audio/vo.wav`, `audio/music.mp3`, Suno o sin música | igual; si se grabó a cámara, `componer.sh` |
-| Otro idioma | textos y `say` en su idioma | igual |
-| Un look que no está | ajusta el estilo más cercano (fondo, trazos, colores, tipografía) | copia el estilo más cercano en `styles/` y modifícalo |
-| Mezclar | — | `style` por escena; pizarrón y estilos se pueden unir con ffmpeg |
+```bash
+SK=~/.cache/video-pizarra-pro
+[ -d "$SK/.git" ] && git -C "$SK" pull -q || git clone -q --depth 1 https://github.com/CristianSoto21/video-pizarra "$SK"
+```
+(Si la carpeta `template/` está junto a este archivo, usa esa ruta como `$SK`.)
 
-## Modo estilos (acuarela · cuaderno · minimal)
+Necesita **Node 18+, ffmpeg y Python 3** (`pip install numpy pillow edge-tts`). Revisa con `which node ffmpeg python3` y avisa a la persona si falta algo; no intentes instalar Node o ffmpeg sin preguntarle.
 
-Además del pizarrón, el skill trae `template-estilos/`: otro motor por código (canvas) con 4 estilos listos — `acuarela` (papel de acuarela, tinta que hierve), `acuarela-viva` (acuarela con naranja/negro/blanco/rojo y mascota que resalta), `cuaderno` (bullet journal con marcatextos) y `minimal` (blanco premium). Úsalo cuando la persona pida uno de esos looks o un video más "limpio/editorial" que el pizarrón. Muéstrale `catalogo-estilos/` para elegir.
+| Carpeta | Para qué |
+|---|---|
+| `$SK/template/` | motor pizarra (SVG + GSAP): mano realista, `ink()`, pizarras, borrado, voz |
+| `$SK/template-estilos/` | motor de estilos (canvas): acuarela, acuarela viva, cuaderno, minimal |
+| `$SK/catalogo-estilos/` | capturas para que la persona elija estilo |
+| `$SK/references/` | guías: `engine-api.md`, `narracion.md`, `storytelling.md`, `lessons.md`, `guion-estilos.md`, `historia.md`, `errores.md` |
 
-- Se escribe como una lista de escenas (`hook, statement, chapter, list, stat, compare, quote, media, steps, cta`) en `video.js`; guía completa en `references/guion-estilos.md`.
-- Persona: su foto (`python3 cutout.py foto.jpg`) o un personaje dibujado con su look (piel, pelo, peinado, lentes, barba).
-- Se pueden mezclar estilos en un mismo video poniendo `style` en cada escena.
-- **Modo historia** (recomendado para intros e historias): mascota continua, cámara que la sigue, transiciones dentro de la historia y un lápiz que dibuja en vivo. Lee `references/historia.md` y parte de `template-estilos/historia.example.js`.
-- **Si la persona ya se grabó a cámara**: su video es la base y la animación va encima solo en los tramos animados (`anclas.py` → `timing.js` → `./componer.sh aroll.mov nombre`). Ver "Si la persona se grabó a cámara" en `references/historia.md`.
-- Antes de mostrar un borrador repasa `references/errores.md` (errores reales que ya cometimos: sensación de presentación, escenas saturadas, mismo layout, nombres de terceros, etc.).
-- Pasos: `cp -r template-estilos ./proyecto && cd proyecto && npm install && npx playwright install chromium && python3 -m venv .venv && .venv/bin/pip install numpy` → `node render.mjs --scenes` (QA, mira las imágenes) → `python3 suno_music.py "<prompt>" "<título>" audio/music.mp3` (opcional) → `./build.sh <nombre>`.
+## Flujo
 
-## Flujo (pizarrón)
+1. Entrevista corta
+2. Investigar y verificar datos
+3. Guion + storyboard → aprobación
+4. Generar la voz
+5. Construir las escenas
+6. QA visual
+7. Música y render
+8. Entregar
 
-1. **Entrevista** (no te la saltes: es lo que separa un video bueno de uno genérico)
-2. **Investigar y verificar datos**
-3. **Storyboard → aprobación**
-4. **Construir `scenes.js`**
-5. **QA visual con capturas**
-6. **Música, beats, efectos y render final**
-7. **Entregar + caption**
+Crea una lista de tareas con estos pasos: el render tarda minutos y la persona quiere ver el avance.
 
 ---
 
-## 1 · Entrevista
+## 1 · Entrevista (adaptada a lo que ya te dieron)
 
-**Adapta la entrevista a lo que ya te dieron.** Si el pedido trae tema, formato y tono (por ejemplo, un prompt copiado de un tutorial), no hagas la entrevista completa: decide lo que falte con defaults sensatos, muestra un resumen de 5 líneas y arranca. Pregunta solo lo que de verdad cambie el video (datos que no puedes verificar, su marca, su CTA). Si dice "hazlo directo", no preguntes nada.
+Si el pedido ya trae tema, formato y tono, no hagas la entrevista completa: decide lo que falte con los defaults, muestra un resumen de 5 líneas y arranca. Si dice "hazlo directo", no preguntes nada. Si no, usa la herramienta de preguntas (máximo 4 por tanda, la opción recomendada primero, en el idioma de la persona):
 
-Usa la herramienta de preguntas (máx. 4 por tanda, cada una con opción recomendada primero). Si la persona ya respondió algo en su mensaje, no lo vuelvas a preguntar. Pregunta en el idioma del usuario.
+- **Tema y la UNA idea** que el espectador debe llevarse. Pide links, notas o datos: los datos correctos importan más que la animación.
+- **Estilo**: pizarra con mano (recomendado; mezcla blanca/verde/negra), acuarela, cuaderno o minimal. Muestra `catalogo-estilos/` si duda.
+- **Formato y duración**: 9:16 para Reels/TikTok/Shorts (default) o 16:9 para YouTube; 30–45 s, 45–60 s (default) o 60–90 s.
+- **Voz**: voz generada (default `es-PE-AlexNeural`; pregunta el país o el público para elegir acento, ver `references/narracion.md`), sin voz (solo música y texto, el modo clásico) o su propia grabación.
+- Solo si importa: **personaje** (la mascota por defecto, su logo o personaje, o ninguno), **colores de marca**, **música** (Suno con `SUNO_API_KEY`, su mp3 en `audio/music.mp3`, o solo efectos) y **CTA** (default: seguir + comentar).
 
-**Tanda 1 — el contenido**
-- **Tema y la UNA idea** que el espectador debe llevarse. ¿Hay links, artículos, notas o datos que el video deba usar? (Pídelos: los datos correctos importan más que la animación.)
-- **Formato**: vertical 9:16 para Reels/TikTok/Shorts (recomendado) u horizontal 16:9 para YouTube.
-- **Duración**: 45–60 s, 60–75 s (recomendado para explicar algo) o 90 s.
-- **Tono y público**: divertido/cercano, serio/profesional, épico. ¿Para quién es?
-
-**Tanda 2 — lo visual**
-- **Personaje**: la mascota por defecto (un bicho cuadrado con bracitos), su propia mascota o marca, o sin mascota. ¿Quiere un segundo personaje humano que represente al espectador?
-- **Imágenes de referencia**: pide explícitamente capturas de estilos que le gusten, su mascota/logo, colores de marca o un video de referencia. Léelas con Read y describe qué vas a tomar de cada una antes de seguir.
-- **Colores / marca**: ¿paleta propia? ¿Debe llevar logo o nombre (o explícitamente NO)?
-- **Idioma** del texto en pantalla.
-
-**Tanda 3 — sonido y cierre**
-- **Música**: generar con Suno (necesita `SUNO_API_KEY` de sunoapi.org), usar un mp3 propio (que lo ponga en `audio/music.mp3`) o sin música (solo efectos).
-- **CTA final**: seguir + comentar (default para alcance), link en bio, producto/servicio, o ninguno.
-- **Hook**: propón 2–3 hooks concretos para ESTE tema (ver `references/storytelling.md`) y deja que elija.
-
-Cierra con un **resumen**: lo que respondió vs. lo que tú decidiste por defecto, en dos grupos separados. Si corrige algo, vuelve a mostrar el resumen antes de seguir.
+Cierra con un resumen en dos grupos: lo que respondió y lo que decidiste por defecto.
 
 ## 2 · Investigar y verificar
 
-- Si el tema es noticia o tiene cifras, busca fuentes (WebSearch/WebFetch) y anota cada dato con su fuente.
-- Solo pon en pantalla datos que aparecen en las fuentes. **No calcules ni inventes cifras derivadas** (p. ej. "precio anterior" deducido de un porcentaje). Si un dato solo viene de medios secundarios, díselo a la persona.
-- Guarda las fuentes: las necesitarás para el caption.
+- Si hay cifras, noticias o afirmaciones del mundo actual, busca fuentes y anota cada dato con su fuente.
+- En pantalla y en la voz van solo datos que aparecen en las fuentes. **No inventes cifras derivadas.** Las cuentas propias (por ejemplo, 100 × 1.1¹⁰) se hacen con código, no de memoria.
+- Guarda las fuentes para el caption.
 
-## 3 · Storyboard → aprobación
+## 3 · Guion + storyboard → aprobación
 
-Lee `references/storytelling.md` y escribe `STORYBOARD.md` en la carpeta del proyecto: una tabla con, por escena, **fondo · herramienta · texto en pantalla · qué hace el personaje · transición de salida**. Muéstrale a la persona un resumen corto (una línea por escena) y **espera su aprobación** antes de animar — salvo que haya pedido hacerlo directo: entonces muéstralo y sigue. Cambiar un storyboard cuesta minutos; cambiar un video, horas.
+Lee `references/storytelling.md` y, si hay voz, `references/narracion.md`. Escribe en la carpeta del proyecto:
 
-Reglas que vienen de lo que ya funcionó (y de lo que no):
-- **Hook en el primer segundo.** La primera frase aparece en ~0.2 s. Nada de intros lentas ni escenas de "contexto" antes del hook.
-- **El texto explica, el personaje actúa.** Cada escena tiene un titular grande y claro arriba + una línea de apoyo. Los gags visuales refuerzan el texto; nunca lo reemplazan (un video "solo con acciones" no se entiende).
-- **Una idea por escena**, en orden de historia: hook → revelación → problema → giro → pruebas → twist/cierre → CTA.
-- **Fondos distintos** por escena y **herramienta distinta** (plumón, gis, pluma, lápiz, pincel) — y varias escenas **sin** herramienta (el texto rebota, se teclea o se estampa).
-- **Transiciones motivadas y rápidas** (0.4–0.8 s): algo de la escena causa el paso a la siguiente (entrar al ojo, borrar, algo cae, una barra se expande, un círculo de tinta, algo revienta, la tarjeta se voltea, destello). No repitas la misma transición seguida.
+- `guion.json`: una línea de voz por momento de la historia (hook → idea → explicación → ejemplo → giro → CTA), con `id` cortos (`hook`, `regla`, `ej8`…).
+- `STORYBOARD.md`: una tabla por escena con **pizarra/fondo · qué se escribe · qué dice la voz · qué hace el personaje · transición**.
 
-## 4 · Construir
+Muéstrale a la persona un resumen de una línea por escena, con el texto de la voz, y **espera su aprobación**, salvo que haya pedido hacerlo directo. Cambiar el guion cuesta minutos; cambiarlo después de animar cuesta horas.
 
-```bash
-PROJ=~/Documents/<slug-del-video>      # o la carpeta que pida la persona
-mkdir -p "$PROJ/audio" && cp -R ~/.claude/skills/video-pizarra/template/. "$PROJ/"
-cd "$PROJ" && npm install && npx playwright install chromium
-cp scenes.example.js scenes.js           # punto de partida: el ejemplo completo
-```
+Reglas que vienen de lo que funcionó:
+- **Hook en el primer segundo.** La primera frase de voz tiene menos de 10 palabras y la primera palabra escrita aparece a los ~0.2 s.
+- **La voz explica y la pizarra muestra la palabra clave.** No escribas la frase completa que se está diciendo. Sin voz, el texto en pantalla lo explica todo (titular + una línea de apoyo).
+- **Una idea por escena**, y alterna las pizarras: blanca con plumón ↔ verde o negra con tiza, más algún fondo de papel (cuaderno, kraft, sepia) para variar.
+- **Al menos un borrado** con sentido (un número que cambia, antes → después) y alguna escena sin mano (la mascota con `popMascot`, `stamp`, `pop`) para que no todo sea escritura.
+- **Transiciones motivadas y distintas**, de 0.4 a 0.8 s: `boardSlide` entre pizarras, `eraser`, `flip`, `zoomInto` hacia el ojo de la mascota, `iris`, `slideUp`… Nunca repitas la misma dos veces seguidas.
 
-Antes de escribir escenas, lee **`references/engine-api.md`** (API completo, coordenadas, transiciones, personajes, sonidos) y revisa `scenes.example.js`: es un video real terminado con todos los patrones. Reescribe `scenes.js` para el nuevo tema siguiendo el storyboard.
-
-- Formato horizontal: `bootVideo(build, { width: 1920, height: 1080 })` y recalcula posiciones.
-- Mascota propia: define su silueta con `mascotShape` (ver engine-api) a partir de la imagen de referencia; dibújala con formas simples (cuerpo, brazos, piernas, ojos) para que pueda actuar. Si es muy compleja, usa `image()` con un PNG transparente y anímala como bloque.
-- Colores de marca: `palette` y `hatches` en la config.
-- Previsualiza en vivo con `npx serve .` (o cualquier servidor estático) y abre `index.html`.
-
-## 5 · QA visual (obligatorio antes del render final)
+## 4 · Generar la voz (si hay voz)
 
 ```bash
-node render.mjs --every 1.2 && python3 contact.py 10    # hoja de contacto de todo el video
+PROJ=~/Documents/videos/<slug>      # o la carpeta que pida la persona
+mkdir -p "$PROJ" && cp -R "$SK/template/." "$PROJ/" && cd "$PROJ" && npm install
+npx playwright install chromium      # solo la primera vez (el navegador que renderiza)
+python3 tts.py guion.json            # → audio/vo.wav + audio/vo.json y una tabla de duraciones
 ```
-Abre `contact.jpg` con Read. Revisa: texto cortado o encimado, personajes tapando texto, escenas en negro/vacías, elementos fuera de cuadro, legibilidad en teléfono. Para las transiciones: `node render.mjs --stills 12.1,12.3,12.5` alrededor de cada una. Corrige y vuelve a revisar. Los errores típicos y sus soluciones están en `references/lessons.md` — léelo si algo se ve raro.
+- Revisa la tabla: la duración total debe acercarse a la pedida. Si se pasa, recorta frases; no subas la velocidad más de `+12%`.
+- Si `tts.py` avisa que **cayó a espeak-ng**, la voz es robótica y solo sirve para maquetar. Díselo a la persona y vuelve a generar la voz con edge-tts antes del render final (necesita internet; `pip install edge-tts`).
+- Para estilos (acuarela/cuaderno/minimal) el flujo es `node guion.mjs && python3 tts.py guion.json` dentro de un proyecto copiado de `template-estilos/` (ver `references/guion-estilos.md`).
 
-## 6 · Música, beats, efectos y render
+## 5 · Construir las escenas (pizarra)
 
-- **Suno** (si hay key): `python3 suno_music.py "<estilo>" "<título>" audio/music.mp3` (instrumental, 100–120 BPM, pulso claro, acorde al tono).
-- **Beats**: `python3 -m venv .venv && .venv/bin/pip install librosa && .venv/bin/python beats.py audio/music.mp3` → `audio/beats.json`. Con esto las transiciones caen en golpes fuertes y la cámara se sacude en los acentos. Sin música, sáltalo.
-- **Render final**: `./build.sh <nombre>` → `<nombre>.mp4` (master) + `<nombre>-movil.mp4` (<30 MB, para mandar por chat/teléfono). Incluye efectos de sonido sintetizados, subida de música en transiciones y volumen normalizado a −14 LUFS.
+Antes de escribir código lee **`references/engine-api.md`** completo, y revisa `scenes.example.js` (video narrado terminado: "La regla del 72") y `scenes.example-musica.js` (video sin voz, sincronizado a la música).
 
-El render tarda ~3–5 min por minuto de video. Córrelo en segundo plano y avisa a la persona.
+```bash
+cp scenes.example.js scenes.js        # punto de partida; reescríbelo según el storyboard
+```
 
-## 7 · Entregar
+Lo esencial:
+- **Todo texto escrito a mano va con `ink()` + `write()`**: la mano traza cada letra en orden y levanta el plumón entre trazos. `bold: true` para titulares. `T()` + `write()` solo destapa el texto, así que úsalo para tipografía de diseño (sellos, globos, CTA), no para "escribir".
+- **Pizarras**: `newScene('whiteboard' | 'greenboard' | 'blackboard')` ya eligen la herramienta (plumón o tiza) y el color de tinta.
+- **Tiempos con voz**: `cue('id', 'palabra')` da el segundo exacto de esa palabra y `seg('id')` el inicio y fin de la línea. Cada escena termina en `seg(id).end` y la transición llena el silencio. Nunca cuentes segundos a mano si hay voz.
+- **Espacio seguro**: el contenido va dentro de `SAFE` (con subtítulos, la franja de abajo es de ellos). La mascota mide ~171 × escala px de alto.
+- **Trazos humanos**: `P(g, d, { rough: 2, double: true })` para círculos y subrayados.
+- **Formato horizontal**: `bootVideo(build, { width: 1920, height: 1080 })` y recalcula posiciones.
+- **Marca**: `palette`, `hatches`, `hand: { skin, sleeve }`, `mascotShape` o `image()` con su logo (ver engine-api §2 y §7).
 
-- Entrega la versión móvil (y dónde está el master). Si la persona está en otro dispositivo, envíala como archivo.
-- Resume en 3–5 líneas qué tiene el video (historia, escenas clave).
-- Ofrece un **caption** con información **extra** que no está en el video (contexto, detalles para devs, detrás de cámaras), con CTA de comentario y hashtags, más una nota de qué datos vienen de qué fuente.
-- Si pide cambios, edita `scenes.js` y vuelve a QA → build. Mantén copias `scenes_vN.js` por versión.
+Previsualiza con `npx serve .` y abre `index.html` si quieres verlo en vivo.
+
+Para **estilos** sigue `references/guion-estilos.md` (y `references/historia.md` para el modo historia) en `video.js`.
+
+## 6 · QA visual (obligatorio antes del render final)
+
+```bash
+node render.mjs --every 1 && python3 contact.py 10     # hoja de contacto → contact.jpg
+```
+Abre `contact.jpg` y revisa: texto cortado o encimado, subtítulos tapando el dibujo, la mano tapando algo que se está diciendo, escenas vacías, elementos fuera de cuadro y legibilidad en un teléfono. Después:
+- `node render.mjs --stills 12.1,12.3,12.5` alrededor de cada transición.
+- Con voz, escoge 3–4 palabras clave de `audio/vo.json` y saca stills en su segundo: lo que esa palabra nombra debe estar dibujándose ahí.
+- Si algo se ve raro, mira `references/lessons.md` (pizarra) o `references/errores.md` (estilos). Corrige y vuelve a revisar.
+
+## 7 · Música y render
+
+- **Suno** (si hay key): `python3 suno_music.py "<estilo>" "<título>" audio/music.mp3`, instrumental de 95–115 BPM, tranquila si hay voz.
+- **Beats** (solo sin voz): `python3 -m venv .venv && .venv/bin/pip install librosa numpy && .venv/bin/python beats.py audio/music.mp3`.
+- **Render**: `./build.sh <nombre>` → `<nombre>.mp4` (master) y `<nombre>-movil.mp4` (<30 MB). Mezcla efectos sintetizados, música y voz; baja la música cuando se habla y normaliza a −14 LUFS. Tarda ~3–5 min por minuto de video: córrelo en segundo plano y avisa.
+- Si Playwright no encuentra Chromium: `npx playwright install chromium`, o `CHROME_PATH=/ruta/a/chrome ./build.sh <nombre>`.
+
+## 8 · Entregar
+
+- Envía la versión móvil e indica dónde quedó el master.
+- Resume en 3–5 líneas qué tiene el video. Si la voz salió del respaldo robótico, dilo claramente.
+- Ofrece un **caption** con información extra (contexto, detalle, fuente de cada dato), una pregunta que invite a comentar y hashtags.
+- Para cambios: edita `guion.json` y vuelve a correr `tts.py` si cambia lo que se dice (los `cue()` se reacomodan solos), o edita `scenes.js`; luego repite QA → build. Guarda copias `scenes_vN.js` por versión.
+
+## Todo se puede personalizar
+Si la persona pide algo que no viene de fábrica (otra voz por personaje, su logo como mascota, otra pizarra, otra tipografía), adáptalo con el API del motor o con una escena propia en `scenes.js`. Lo único que no se negocia es la calidad: texto legible, datos reales y QA antes de entregar.

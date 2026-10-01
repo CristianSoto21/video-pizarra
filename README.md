@@ -1,53 +1,31 @@
-# video-pizarra 🎬✏️
+# video-pizarra-pro 🎬✏️
 
-Skill para **Claude Code** que crea videos animados estilo pizarrón (dibujo a mano) sobre cualquier tema:
-una mascota que actúa, texto que se escribe solo con plumón/gis/lápiz, fondos distintos por escena,
-transiciones creativas al ritmo de la música, efectos de sonido y un final tipo storyboard.
-Todo se genera con código y sale un MP4 listo para Reels, TikTok, Shorts o YouTube.
+Fork mejorado de [santmun/video-pizarra](https://github.com/santmun/video-pizarra): skill para **Claude** que crea videos animados
+estilo pizarra sobre cualquier tema y los renderiza a MP4 (Reels, TikTok, Shorts o YouTube).
 
-Antes de producir, el skill te entrevista (tema, fuentes, formato, personaje, imágenes de referencia,
-música, llamado a la acción) y te enseña el storyboard para que lo apruebes.
+## Qué cambia respecto al original
+- **Escritura real**: cada letra se traza en orden con fuentes de un solo trazo (Hershey/EMS, MIT), con tildes, ñ, ¿ y ¡.
+- **Mano realista** que sostiene el plumón, la tiza, el lápiz o el mota; entra a cuadro, levanta la mano entre trazos y proyecta sombra.
+- **Pizarra blanca, verde y negra**, cada una con su herramienta y tinta, y transición `boardSlide` entre ellas.
+- **Borrado real** de una zona de la pizarra, con residuo de tiza.
+- **Trazos imperfectos** (`rough`, `double`).
+- **Voz en off gratis con edge-tts**: el video sigue a la voz palabra por palabra (`cue()`), con subtítulos karaoke y la música bajando cuando se habla.
+- **La voz también en los estilos** acuarela, cuaderno y minimal (cada escena dura lo que dura su frase).
+- **Fuentes incluidas en el proyecto**: el render ya no depende de Google Fonts.
 
 ## Instalación
+1. Guarda `SKILL.md` como skill en Claude, o copia esta carpeta a `~/.claude/skills/video-pizarra-pro/`.
+   La skill descarga este repo sola si no encuentra `template/` junto a ella.
+2. Requisitos: **Node.js 18+**, **ffmpeg**, **Python 3** con `pip install numpy pillow edge-tts`.
+3. Pide algo como: *"Hazme un video pizarra de 45 segundos con voz explicando la regla del 72"*.
 
-1. Copia la carpeta `video-pizarra` a `~/.claude/skills/` (en Windows: `%USERPROFILE%\.claude\skills\`).
-2. Instala lo necesario (una sola vez):
-   - **Node.js 18+** → https://nodejs.org
-   - **ffmpeg** → Mac: `brew install ffmpeg` · Windows: `winget install ffmpeg` · Linux: `sudo apt install ffmpeg`
-   - **Python 3** con `numpy` y `Pillow` → `pip install numpy pillow`
-   - (Opcional, para sincronizar con la música) `librosa` → el skill lo instala en un entorno virtual.
-3. Abre Claude Code y pide algo como:
-   > "Hazme un video pizarra de 60 segundos explicando qué es el interés compuesto"
+## Probar el ejemplo
+```bash
+cp -R template mi-video && cd mi-video && npm install && npx playwright install chromium
+cp scenes.example.js scenes.js && cp guion.example.json guion.json
+python3 tts.py guion.json && ./build.sh regla-72
+```
 
-La primera vez el skill instalará el navegador que usa para renderizar (`npx playwright install chromium`).
-
-## Hazlo tuyo
-Pídelo con tus palabras: tus colores, tu tipografía (cualquier fuente de Google Fonts), tu logo o personaje como mascota, tu foto, tus capturas, tu voz, 16:9 o 9:16, cualquier idioma. Si algo no viene de fábrica, Claude lo adapta.
-
-## Música (opcional)
-
-- **Con Suno**: consigue una API key en https://sunoapi.org y guárdala así:
-  ```
-  mkdir -p ~/.config/video-pizarra && echo "SUNO_API_KEY=tu_key" > ~/.config/video-pizarra/keys.env
-  ```
-- **Tu propia canción**: pon el mp3 en `audio/music.mp3` dentro de la carpeta del proyecto. Asegúrate de tener derechos para usarla.
-- **Sin música**: el video queda solo con efectos de sonido.
-
-## Qué entrega
-- `<nombre>.mp4`: master en alta calidad.
-- `<nombre>-movil.mp4`: versión ligera (<30 MB) para mandar por WhatsApp o subir desde el teléfono.
-- Una propuesta de caption con información extra y hashtags.
-
-## Tiempos
-Construir un video toma de 20 a 40 minutos de trabajo del agente, y el render final unos 3–5 minutos por minuto de video.
-
-## Personaliza
-- **Tu mascota o marca**: comparte una imagen de referencia en la entrevista y el skill la redibuja con formas simples para que pueda actuar.
-- **Tus colores**: dilos en la entrevista (hex o descripción).
-- **Horizontal 16:9**: pídelo en la entrevista.
-
-Hecho con ❤️ por Horizontes IA.
-
-
-## Bonus: 3 estilos extra
-Además del pizarrón incluye `template-estilos/` con **acuarela**, **cuaderno** y **minimal** (mira `catalogo-estilos/`). Pídele a Claude: *"hazme un video en estilo acuarela sobre …"*.
+## Créditos
+Motor original, mascota y estilos: [Horizontes IA / santmun](https://github.com/santmun/video-pizarra).
+Fuentes de un solo trazo: [hersheytext](https://github.com/techninja/hersheytext) (MIT, ver `template/fonts/LICENSE-hershey.txt`).

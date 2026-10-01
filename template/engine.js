@@ -10,12 +10,31 @@ const NS = 'http://www.w3.org/2000/svg';
 
 window.bootVideo = async function bootVideo(build, cfg = {}) {
   await document.fonts.ready;
-  const fonts = cfg.fontLoads || ['700 100px Caveat', '400 60px Kalam', '500 40px "JetBrains Mono"'];
+  const fonts = cfg.fontLoads || ['700 100px Caveat', '400 60px Kalam', '700 60px Kalam', '500 40px "JetBrains Mono"'];
   await Promise.all(fonts.map(f => document.fonts.load(f)));
 
+  // single-stroke handwriting fonts (Hershey/EMS, MIT) → text traced pen-stroke by pen-stroke
+  const SFONTS = {};
+  async function loadStrokeFont(name) {
+    const doc = new DOMParser().parseFromString(await (await fetch(`fonts/${name}.svg`)).text(), 'image/svg+xml');
+    const ff = doc.querySelector('font-face'), fo = doc.querySelector('font');
+    const F = { glyphs: {}, adv: +fo.getAttribute('horiz-adv-x') || 400, capH: +ff.getAttribute('cap-height') || 500 };
+    doc.querySelectorAll('glyph').forEach(g => { const u = g.getAttribute('unicode'); if (u != null) F.glyphs[u] = { d: g.getAttribute('d') || '', adv: +(g.getAttribute('horiz-adv-x') || F.adv) }; });
+    SFONTS[name] = F;
+  }
+  const STROKE_FONT = cfg.strokeFont || 'EMSReadability';
+  const BOLD_FONT = cfg.boldFont || 'EMSTech';
+  const ALL_FONTS = ['EMSReadability', 'EMSTech', 'EMSAllure', 'EMSFelix', 'EMSNixish', 'EMSElfin', 'HersheyScript1'];
+  await Promise.all([...new Set([STROKE_FONT, BOLD_FONT, ...(cfg.strokeFonts || ALL_FONTS)])]
+    .map(n => loadStrokeFont(n).catch(e => console.warn('stroke font', n, e.message))));
+  // narration timing written by tts.py (optional). With narration the clock is real time and transitions don't snap to beats.
+  let VO = null;
+  try { const r = await fetch(cfg.voUrl || 'audio/vo.json'); if (r.ok) VO = await r.json(); } catch (e) {}
+
   const params = new URLSearchParams(location.search);
-  const MODE = (params.get('mode') || cfg.mode || 'A').toUpperCase();   // A = transitions land on beats
-  const SPEED = cfg.speed ?? 0.8;                                        // global tempo (0.8 = 20% faster)
+  const MODE = VO ? 'N' : (params.get('mode') || cfg.mode || 'A').toUpperCase();   // A = transitions land on beats (never with narration)
+  const SPEED = VO ? 1 : (cfg.speed ?? 0.8);                                         // global tempo (0.8 = 20% faster)
+  if (VO && cfg.speed && cfg.speed !== 1) console.warn('narration present: speed forced to 1 so the picture stays on the voice');
   const W = cfg.width || 1080, Hh = cfg.height || 1920;
   const CX = W / 2, CY = Hh / 2;
   const S = t => t * SPEED;
@@ -56,6 +75,9 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     <pattern id="bpMinor" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40,0 L0,0 0,40" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="1.5"/></pattern>
     <pattern id="bpMajor" width="200" height="200" patternUnits="userSpaceOnUse"><path d="M200,0 L0,0 0,200" fill="none" stroke="#fff" stroke-opacity=".2" stroke-width="2.5"/></pattern>
     <pattern id="halftone" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="18" cy="18" r="3" fill="#fff" fill-opacity=".12"/></pattern>
+    <filter id="handShadow" x="-60%" y="-60%" width="220%" height="220%"><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .3 0"/><feGaussianBlur stdDeviation="10"/><feOffset dx="26" dy="30"/></filter>
+    <linearGradient id="glare" x1="0" y1="0" x2="1" y2="1"><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".42" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset=".62" stop-color="#fff" stop-opacity=".3"/><stop offset=".7" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="smudge" filterUnits="userSpaceOnUse" x="-300" y="-300" width="${W + 600}" height="${Hh + 600}"><feGaussianBlur stdDeviation="14"/></filter>
     <clipPath id="screenClip" clipPathUnits="userSpaceOnUse"><rect id="screenClipR" x="0" y="0" width="${W}" height="${Hh}" rx="0"/></clipPath>
   </defs>
   <rect width="${W}" height="${Hh}" fill="#231C18"/>
@@ -63,7 +85,8 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   <g id="scenes"></g><g id="screen"></g>
   <rect id="flash" width="${W}" height="${Hh}" fill="url(#flashG)" opacity="0"/>
   <rect width="${W}" height="${Hh}" filter="url(#grain)" opacity=".22"/>
-  <g id="tools"></g>`;
+  <g id="tools"></g>
+  <g id="captions"></g>`;
   const defs = svg.querySelector('defs');
   const scenesL = document.getElementById('scenes'), screenL = document.getElementById('screen');
 
@@ -139,31 +162,66 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     brush: `<g transform="rotate(30) scale(1.2)"><path d="M0,0 C-11,-14 -13,-36 -11,-54 L11,-54 C13,-36 11,-14 0,0 Z" fill="#1c1c1c"/>
       <rect x="-12" y="-88" width="24" height="36" rx="3" fill="#C9CDD2" stroke="#8d9299" stroke-width="2"/><path d="M-12,-88 L-8,-290 Q0,-300 8,-290 L12,-88 Z" fill="#B5462E"/></g>`,
   };
+  // cfg.hand: false → floating tools (classic look). Otherwise a realistic right hand holds the tool.
+  const HAND = cfg.hand === false ? null : Object.assign({ skin: '#EFC4A0', sleeve: '#3E5C8A', scale: W < Hh ? 0.82 : 0.9, angle: -34 }, cfg.hand || {});
   const toolEls = {};
-  for (const [k, s] of Object.entries(TOOLS)) { const g = el('g', { visibility: 'hidden' }, toolsL); g.innerHTML = s; toolEls[k] = g; }
-  const state = { tool: null };
+  for (const k of [...Object.keys(TOOLS), 'eraser']) {
+    const g = el('g', { visibility: 'hidden' }, toolsL);
+    if (HAND && window.HAND_SVG) { const body = HAND_SVG({ tool: k, skin: HAND.skin, sleeve: HAND.sleeve, cuff: HAND.cuff }); g.innerHTML = `<g class="hrot"><g filter="url(#handShadow)">${body}</g>${body}</g>`; }
+    else g.innerHTML = TOOLS[k] || TOOLS.marker;
+    toolEls[k] = g;
+  }
+  const state = { tool: undefined };              // undefined → each scene's board decides (marker on white, chalk on chalkboards)
+  const sceneOf = node => { for (let n = node; n; n = n.parentNode) if (n._sc) return n._sc; return null; };
+  const toolFor = (node, tool) => tool !== undefined ? tool : state.tool !== undefined ? state.tool : (sceneOf(node)?.tool ?? null);
+  const inkFor = node => (sceneOf(node)?.ink) || INK;
+  const hsh = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
   /* ---------- primitives ---------- */
   const toRoot = (node, x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = y; return p.matrixTransform(node.getCTM()); };
-  function P(parent, d, { color = INK, w = 7, fill = 'none', fo = 1, cap = 'round', opacity = 1 } = {}) {
+  // hand-made imperfection: resample a path and nudge it sideways with smooth seeded noise
+  let roughSeed = 1;
+  function roughen(d, amp = 2, seed = roughSeed++) {
+    const tmp = el('path', { d }, defs), L = tmp.getTotalLength(), n = Math.max(8, Math.ceil(L / 9));
+    const ph = [hsh(seed) * 6.3, hsh(seed + 1) * 6.3, hsh(seed + 2) * 6.3];
+    let out = '', prev = tmp.getPointAtLength(0);
+    for (let i = 0; i <= n; i++) {
+      const q = tmp.getPointAtLength(L * i / n), nx = tmp.getPointAtLength(Math.min(L, L * i / n + 1));
+      const dx = nx.x - q.x, dy = nx.y - q.y, m = Math.hypot(dx, dy) || 1;
+      const u = i / n, k = amp * (Math.sin(u * 7.1 + ph[0]) * .55 + Math.sin(u * 17.3 + ph[1]) * .3 + Math.sin(u * 31.7 + ph[2]) * .15);
+      out += (i ? 'L' : 'M') + (q.x - dy / m * k).toFixed(1) + ',' + (q.y + dx / m * k).toFixed(1);
+      prev = q;
+    }
+    tmp.remove();
+    return out;
+  }
+  function P(parent, d, { color, w = 7, fill = 'none', fo = 1, cap = 'round', opacity = 1, rough = cfg.rough ?? 0, double = false } = {}) {
+    color = color ?? inkFor(parent);
+    if (rough) d = roughen(d, rough);
     const p = el('path', { d, fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linecap': cap, 'stroke-linejoin': 'round', opacity }, parent);
+    if (double) { const tw = el('path', { d: roughen(d, Math.max(1.5, rough || 2)), fill: 'none', stroke: color, 'stroke-width': w * 0.55, 'stroke-linecap': cap, opacity: opacity * 0.55 }, parent); const l2 = tw.getTotalLength(); tw.setAttribute('stroke-dasharray', l2 + ' ' + l2); tw.setAttribute('stroke-dashoffset', l2); tw._len = l2; p._twin = tw; }
     p._color = color;
     if (fill !== 'none') { const f = el('path', { d, fill, stroke: 'none', 'fill-opacity': 0 }, parent); parent.insertBefore(f, p); p._fill = f; p._fo = fo; }
     const len = p.getTotalLength();
     p.setAttribute('stroke-dasharray', len + ' ' + len); p.setAttribute('stroke-dashoffset', len); p._len = len;
     return p;
   }
-  function done(p) { p.setAttribute('stroke-dashoffset', 0); if (p._fill) p._fill.setAttribute('fill-opacity', p._fo); }
-  function draw(p, at, dur, { ease = 'power1.inOut', tool = state.tool, sound = true } = {}) {
+  function done(p) { p.setAttribute('stroke-dashoffset', 0); if (p._twin) p._twin.setAttribute('stroke-dashoffset', 0); if (p._fill) p._fill.setAttribute('fill-opacity', p._fo); }
+  function draw(p, at, dur, { ease = 'power1.inOut', tool, sound = true } = {}) {
+    tool = toolFor(p, tool);
     const a = S(at), d = S(dur);
     tl.fromTo(p, { attr: { 'stroke-dashoffset': p._len } }, { attr: { 'stroke-dashoffset': 0 }, duration: d, ease }, a);
-    strokes.push({ kind: 'path', node: p, start: a, dur: d, ease: gsap.parseEase(ease), color: p._color, tool });
+    if (p._twin) tl.fromTo(p._twin, { attr: { 'stroke-dashoffset': p._twin._len } }, { attr: { 'stroke-dashoffset': 0 }, duration: d, ease }, a + d * 0.06);
+    const pe = gsap.parseEase(ease);
+    strokes.push({ kind: 'path', node: p, start: a, dur: d, color: p._color, tool,
+      point: tt => { const q = p.getPointAtLength(p._len * pe(Math.min(1, Math.max(0, (tt - a) / d)))); return toRoot(p, q.x, q.y); } });
     if (p._fill) tl.fromTo(p._fill, { attr: { 'fill-opacity': 0 } }, { attr: { 'fill-opacity': p._fo }, duration: S(0.35), ease: 'power1.out' }, a + d);
     if (sound && tool && dur > 0.12) sfx('scr_' + tool, at, { dur, gain: 0.8 });
     else if (sound && !tool && dur > 0.25) sfx('draw_soft', at, { dur, gain: 0.5 });
   }
   let clipId = 0;
-  function T(parent, x, y, text, { size = 80, color = INK, anchor = 'middle', cls = 'hand', rot = 0, stroke = null } = {}) {
+  function T(parent, x, y, text, { size = 80, color, anchor = 'middle', cls = 'hand', rot = 0, stroke = null } = {}) {
+    color = color ?? inkFor(parent);
     const outer = el('g', { transform: `translate(${x},${y}) rotate(${rot})` }, parent);
     const g = el('g', {}, outer);
     const attrs = { x: 0, y: 0, 'font-size': size, fill: color, 'text-anchor': anchor, class: cls };
@@ -179,13 +237,101 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     return t;
   }
   const show_ = t => t._r.setAttribute('width', t._b.width + 32);
-  function write(t, at, dur, { tool = state.tool } = {}) {
+  function write(t, at, dur, { tool, sound = true } = {}) {
+    if (t._ink) return writeInk(t, at, dur, { tool, sound });
+    tool = toolFor(t, tool);
     dur = dur ?? Math.min(1.6, 0.25 + t.textContent.length * 0.045);
     const a = S(at), d = S(dur);
     tl.fromTo(t._r, { attr: { width: 0 } }, { attr: { width: t._b.width + 32 }, duration: d, ease: 'none' }, a);
-    strokes.push({ kind: 'text', node: t, start: a, dur: d, color: t._color, tool });
-    if (tool) sfx('scr_' + tool, at, { dur, gain: 0.8 });
+    strokes.push({ kind: 'text', node: t, start: a, dur: d, color: t._color, tool,
+      point: tt => { const b = t._b, p = (tt - a) / d; return toRoot(t, b.x + b.width * p, b.y + b.height * (0.62 + 0.14 * Math.sin(tt * 38))); } });
+    if (tool && sound) sfx('scr_' + tool, at, { dur, gain: 0.8 });
   }
+
+  /* ---------- real handwriting: every pen stroke traced in writing order ---------- */
+  // ink(g, x, y, 'Texto', opts) → single-stroke font traced in writing order; { bold: true } = fat marker for headlines.
+  // size ≈ CSS font-size. '\n' breaks lines. jitter 0..2 = how hand-made the letters wobble.
+  let inkSeed = 1;
+  function inkWidth(text, size, font, bold) {
+    const lines = String(text).split('\n');
+    const F = SFONTS[font] || SFONTS[STROKE_FONT] || Object.values(SFONTS)[0], k = size * 0.62 / F.capH;
+    return Math.max(...lines.map(l => [...l].reduce((s, ch) => s + (F.glyphs[ch]?.adv ?? F.adv) * k, 0)));
+  }
+  function ink(parent, x, y, text, { size = 80, color, font, w, anchor = 'middle', rot = 0, lineH = 1.3, jitter = 1, bold = false, maxWidth = W - 140 } = {}) {
+    color = color ?? inkFor(parent);
+    font = font || (bold ? BOLD_FONT : STROKE_FONT);
+    // never let a line run off the board: shrink to fit (maxWidth: false to disable)
+    if (maxWidth) { const mw = inkWidth(text, size, font, bold); if (mw > maxWidth) { const f = maxWidth / mw; size *= f; if (w) w *= Math.max(0.6, f); } }
+    const outer = el('g', { transform: `translate(${x},${y}) rotate(${rot})` }, parent);
+    const lines = String(text).split('\n'), paths = [], fills = [];
+    const addStroke = (sub, g, sw) => {
+      const p = el('path', { d: sub, fill: 'none', stroke: color, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+      const len = p.getTotalLength() || 0.01;
+      p.setAttribute('stroke-dasharray', `${len} ${len}`); p.setAttribute('stroke-dashoffset', len); p._len = len;
+      return p;
+    };
+    let widths;
+    {
+      const F = SFONTS[font] || SFONTS[STROKE_FONT] || Object.values(SFONTS)[0];
+      const k = size * 0.62 / F.capH;
+      w = w ?? Math.max(3, size * (bold ? 0.13 : 0.075));   // bold = a fat chisel marker
+      widths = lines.map(l => [...l].reduce((s, ch) => s + (F.glyphs[ch]?.adv ?? F.adv) * k, 0));
+      lines.forEach((line, li) => {
+        let cx = anchor === 'middle' ? -widths[li] / 2 : anchor === 'end' ? -widths[li] : 0;
+        [...line].forEach(ch => {
+          const gl = F.glyphs[ch], adv = (gl?.adv ?? F.adv) * k;
+          if (gl && gl.d.trim()) {
+            const sd = inkSeed++, sc = 1 + (hsh(sd) - .5) * 0.08 * jitter, r = (hsh(sd + 7) - .5) * 4 * jitter, dy = (hsh(sd + 3) - .5) * size * 0.05 * jitter;
+            const gg = el('g', { transform: `translate(${(cx + adv / 2).toFixed(1)},${(li * size * lineH + dy).toFixed(1)}) rotate(${r.toFixed(2)}) translate(${(-adv / 2).toFixed(1)},0) scale(${(k * sc).toFixed(4)},${(-k * sc).toFixed(4)})` }, outer);
+            gl.d.split(/(?=M)/).forEach(sub => { if (sub.trim()) paths.push(addStroke(sub, gg, (w / (k * sc)).toFixed(2))); });
+          }
+          cx += adv;
+        });
+      });
+    }
+    return { _ink: true, paths, fills, outer, _g: outer, _color: color, size, chars: String(text).replace(/\s/g, '').length, width: Math.max(...widths), height: size * (0.75 + (lines.length - 1) * lineH) };
+  }
+  function writeInk(t, at, dur, { tool, sound = true } = {}) {
+    tool = toolFor(t.outer, tool);
+    dur = dur ?? Math.min(4, Math.max(0.5, 0.3 + t.chars * 0.075));
+    if (!t.paths.length) return;
+    // screen-space length of each stroke + the pen-lift hops between them set each stroke's share of the time
+    const ends = t.paths.map(p => [localTo(p, t.outer, p.getPointAtLength(0)), localTo(p, t.outer, p.getPointAtLength(p._len))]);
+    const sl = t.paths.map((p, i) => Math.max(4, Math.hypot(ends[i][1].x - ends[i][0].x, ends[i][1].y - ends[i][0].y) * 0.4 + p._len * localScale(p, t.outer) * 0.6));
+    const hop = t.paths.map((p, i) => i ? Math.max(t.size * 0.12, Math.hypot(ends[i][0].x - ends[i - 1][1].x, ends[i][0].y - ends[i - 1][1].y) * 0.35) : 0);
+    const total = sl.reduce((a, b) => a + b, 0) + hop.reduce((a, b) => a + b, 0);
+    const a0 = S(at), D = S(dur), items = [];
+    let cur = 0;
+    t.paths.forEach((p, i) => {
+      cur += hop[i];
+      const s0 = a0 + cur / total * D, d0 = sl[i] / total * D;
+      tl.fromTo(p, { attr: { 'stroke-dashoffset': p._len } }, { attr: { 'stroke-dashoffset': 0 }, duration: d0, ease: 'sine.inOut' }, s0);
+      items.push({ node: p, start: s0, dur: d0 });
+      cur += sl[i];
+      const last = i === t.paths.length - 1 || t.paths[i + 1]._fill !== p._fill;
+      if (p._fill && last) tl.fromTo(p._fill, { attr: { 'fill-opacity': 0 } }, { attr: { 'fill-opacity': 1 }, duration: Math.min(0.25, D * 0.15), ease: 'power1.out' }, s0 + d0 * 0.6);
+    });
+    const se = gsap.parseEase('sine.inOut');
+    const ptAt = (it, u) => { const q = it.node.getPointAtLength(it.node._len * se(u)); return toRoot(it.node, q.x, q.y); };
+    strokes.push({ kind: 'seq', items, start: a0, dur: D, color: t._color, tool,
+      point(tt) {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (tt < it.start) {                       // pen lifted, hopping to the next stroke
+            const pr = items[i - 1]; if (!pr) return ptAt(it, 0);
+            const u = (tt - pr.start - pr.dur) / Math.max(1e-4, it.start - pr.start - pr.dur), A = ptAt(pr, 1), B = ptAt(it, 0);
+            return { x: A.x + (B.x - A.x) * u, y: A.y + (B.y - A.y) * u, lift: Math.sin(Math.PI * Math.min(1, Math.max(0, u))) };
+          }
+          if (tt < it.start + it.dur) return ptAt(it, (tt - it.start) / it.dur);
+        }
+        return ptAt(items[items.length - 1], 1);
+      } });
+    if (tool && sound) sfx('scr_' + tool, at, { dur, gain: 0.8 });
+  }
+  // geometry without getCTM (works while a scene is still display:none at build time)
+  function chain(node, anc) { let m = svg.createSVGMatrix(); for (let n = node.parentNode; n && n !== anc; n = n.parentNode) { const c = n.transform?.baseVal?.consolidate(); if (c) m = c.matrix.multiply(m); } return m; }
+  const localTo = (node, anc, q) => { const p = svg.createSVGPoint(); p.x = q.x; p.y = q.y; return p.matrixTransform(chain(node, anc)); };
+  const localScale = (node, anc) => { const m = chain(node, anc); return Math.hypot(m.a, m.b); };
   function pop(t, at, { rot = -10, sound = 'pop' } = {}) {
     show_(t);
     gsap.set(t._g, { scale: 0, transformOrigin: '50% 60%' });
@@ -481,20 +627,25 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
 
   /* ---------- scenes: outer (finale) > inner (transitions) > cam (drift/shake) > bg + content ---------- */
   const SC = [];
-  function newScene(bgFn, { filter = 'url(#rough)' } = {}) {
+  // boards decide the default tool and ink colour of a scene: whiteboard → marker/dark ink, chalkboards → chalk/white
+  const BOARD = { whiteboard: ['marker', null, 'url(#rough)'], greenboard: ['chalk', 'chalk', 'url(#chalk)'], blackboard: ['chalk', 'chalk', 'url(#chalk)'], chalk: ['chalk', 'chalk', 'url(#chalk)'], blueprint: ['chalk', 'chalk', 'url(#rough)'] };
+  function newScene(bgFn, { filter, tool, ink: inkColor } = {}) {
     const outer = el('g', { 'clip-path': 'url(#screenClip)' }, scenesL);
     const inner = el('g', {}, outer), cam = el('g', {}, inner), bg = el('g', {}, cam);
     (typeof bgFn === 'string' ? BG[bgFn] : bgFn)(bg);
-    const content = el('g', { filter }, cam);
+    const bd = typeof bgFn === 'string' ? BOARD[bgFn] : null;
+    const content = el('g', { filter: filter || bd?.[2] || 'url(#rough)' }, cam);
     const border = el('rect', { width: W, height: Hh, rx: 70, fill: 'none', stroke: '#F7F1E6', 'stroke-width': 26, opacity: 0 }, outer);
     gsap.set(outer, { display: 'none' });
-    const sc = { outer, inner, cam, bg, content, g: content, border, i: SC.length, t0: null, t1: null, camFn: null };
+    const sc = { outer, inner, cam, bg, content, g: content, border, i: SC.length, t0: null, t1: null, camFn: null,
+      board: bd ? (bd[1] ? 'chalk' : 'white') : null, tool: tool !== undefined ? tool : (bd ? bd[0] : null),
+      ink: inkColor || (bd?.[1] ? PAL[bd[1]] : null) };
+    content._sc = sc; outer._sc = sc;
     SC.push(sc);
     return sc;
   }
   const show = (sc, at) => { if (sc.t0 == null) sc.t0 = S(at); tl.set(sc.outer, { display: 'inline' }, S(at)); };
   const hide = (sc, at) => { if (sc.t1 == null) sc.t1 = S(at); tl.set(sc.outer, { display: 'none' }, S(at)); };
-  const hsh = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   const camZ = (sc, t) => 1.025 + 0.05 * Math.min(1, Math.max(0, (t - sc.t0) / ((sc.t1 ?? sc.t0 + 8) - sc.t0)));
   const FIN = { on: 0 };
   updaters.push(T => {
@@ -512,6 +663,24 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
   });
 
   const R = (g, a) => el('rect', Object.assign({ x: -60, y: -60, width: W + 120, height: Hh + 120 }, a), g);
+  // leftovers of earlier lessons: short wiped strokes in a few loose clusters (deterministic per scene)
+  function ghosts(g, color, op, sw, seed, soft = false) {
+    const gg = el('g', { opacity: op, filter: soft ? 'url(#smudge)' : 'none' }, g);
+    for (let c = 0; c < 4; c++) {
+      const cx = (0.15 + hsh(seed + c * 3) * 0.7) * W, cy = (0.1 + hsh(seed + c * 5 + 1) * 0.8) * Hh, n = soft ? 2 : 3 + Math.floor(hsh(seed + c) * 3);
+      for (let i = 0; i < n; i++) {
+        const x0 = cx - (0.12 + hsh(seed + c + i * 7) * 0.18) * W, x1 = cx + (0.08 + hsh(seed + c * 2 + i) * 0.2) * W, y0 = cy + i * (soft ? 110 : 46);
+        el('path', { d: roughen(`M${x0.toFixed(0)},${y0.toFixed(0)} L${x1.toFixed(0)},${(y0 + (hsh(i + c) - .5) * 20).toFixed(0)}`, soft ? 14 : 5, seed + c * 10 + i), fill: 'none', stroke: color, 'stroke-width': sw * (0.6 + hsh(seed + i * c) * 0.8), 'stroke-linecap': 'round' }, gg);
+      }
+    }
+  }
+  function chalkboard(g, base, dust) {
+    R(g, { fill: base });
+    ghosts(g, dust, 0.06, 90, 9, true);                 // wiped chalk clouds
+    R(g, { filter: 'url(#grain)', opacity: .38 }); specks(g, 5, 110, dust);
+    el('rect', { x: 0, y: 0, width: W, height: Hh, fill: 'none', stroke: '#6B4A2E', 'stroke-width': 34 }, g);
+    el('rect', { x: 17, y: 17, width: W - 34, height: Hh - 34, fill: 'none', stroke: '#3E2A19', 'stroke-width': 3 }, g);
+  }
   const BG = {
     paper(g) { R(g, { fill: PAL.paper }); R(g, { filter: 'url(#grain)', opacity: .5 }); specks(g, 11); },
     chalk(g) {
@@ -535,12 +704,58 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     kraft(g) { R(g, { fill: '#C49E6C' }); R(g, { filter: 'url(#fibers)', opacity: .8 }); R(g, { filter: 'url(#grain)', opacity: .6 }); },
     blueprint(g) { R(g, { fill: '#15335B' }); R(g, { fill: 'url(#bpMinor)' }); R(g, { fill: 'url(#bpMajor)' });
       el('rect', { x: 40, y: 40, width: W - 80, height: Hh - 80, fill: 'none', stroke: '#fff', 'stroke-opacity': .35, 'stroke-width': 3 }, g); },
+    whiteboard(g) {
+      R(g, { fill: '#F6F6F2' });
+      ghosts(g, '#8a8f96', 0.05, 16, 3);                 // faint ghosts of old, badly erased marker
+      el('rect', { x: -60, y: -60, width: W + 120, height: Hh + 120, fill: 'url(#glare)' }, g);
+      R(g, { filter: 'url(#grain)', opacity: .18 });
+      el('rect', { x: 10, y: 10, width: W - 20, height: Hh - 20, rx: 10, fill: 'none', stroke: '#C4C9CE', 'stroke-width': 20 }, g);
+      el('rect', { x: 20, y: 20, width: W - 40, height: Hh - 40, rx: 6, fill: 'none', stroke: '#9AA0A6', 'stroke-width': 2.5 }, g);
+    },
+    greenboard(g) { chalkboard(g, '#2D4B3B', '#DDE9DF'); },
+    blackboard(g) { chalkboard(g, '#24292B', '#E3E6E3'); },
     solid: color => g => R(g, { fill: color }),
     sunburst(color = '#E8874F', rayColor = '#F29A62') { return g => { R(g, { fill: color }); const rg = el('g', {}, g);
       for (let k = 0; k < 18; k++) { const a1 = k / 18 * Math.PI * 2, a2 = a1 + Math.PI / 36, L = Math.max(W, Hh) * 1.4;
         rg.insertAdjacentHTML('beforeend', `<path d="M${CX},${CY} L${CX + Math.cos(a1) * L},${CY + Math.sin(a1) * L} L${CX + Math.cos(a2) * L},${CY + Math.sin(a2) * L} Z" fill="${rayColor}"/>`); }
       g._rays = rg; }; },
   };
+
+  /* ---------- real erasing: a felt eraser wipes part of the board, leaving chalk dust ---------- */
+  // erase(scene, at, dur, { x, y, w, h } | { targets: [inkText, path, group…] }) erases everything drawn into the
+  // scene BEFORE this call inside that box (new things drawn after the call are untouched).
+  let eraseN = 0;
+  function erase(sc, at, dur = 0.9, { x, y, w, h, targets, pad = 30, residue = sc.board === 'chalk', sound = true } = {}) {
+    if (targets) {
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      targets.forEach(tg => { const n = tg.outer || tg._outer || tg; const b = n.getBBox(), m = chain({ parentNode: n }, sc.content);
+        [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]].forEach(([px, py]) => {
+          const q = localTo({ parentNode: n }, sc.content, { x: px, y: py }); x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }); });
+      x = x0 - pad; y = y0 - pad; w = x1 - x0 + 2 * pad; h = y1 - y0 + 2 * pad;
+    }
+    x = x ?? 0; y = y ?? 0; w = w ?? W; h = h ?? Hh;
+    const id = 'er' + (eraseN++), pass = Math.min(150, Math.max(70, h / 2.2));
+    const mask = el('mask', { id, maskUnits: 'userSpaceOnUse', x: -400, y: -400, width: W + 800, height: Hh + 800 }, defs);
+    el('rect', { x: -400, y: -400, width: W + 800, height: Hh + 800, fill: '#fff' }, mask);
+    const rows = Math.max(1, Math.ceil(h / (pass * 0.85)));
+    let d = '';
+    for (let r = 0; r < rows; r++) { const yy = y + pass * 0.45 + r * (h - pass * 0.9) / Math.max(1, rows - 1); d += (r ? 'L' : 'M') + (r % 2 ? x + w - pass * .3 : x + pass * .3).toFixed(1) + ',' + yy.toFixed(1) + 'L' + (r % 2 ? x + pass * .3 : x + w - pass * .3).toFixed(1) + ',' + yy.toFixed(1); }
+    if (rows === 1) d = `M${x + pass * .3},${y + h / 2}L${x + w - pass * .3},${y + h / 2}L${x + pass * .3},${y + h / 2 + 4}`;
+    const mp = el('path', { d, fill: 'none', stroke: '#000', 'stroke-width': pass * 1.25, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, mask);
+    const len = mp.getTotalLength(); mp.setAttribute('stroke-dasharray', `${len} ${len}`); mp.setAttribute('stroke-dashoffset', len);
+    const old = el('g', { mask: `url(#${id})` }, sc.content);       // everything drawn so far goes under this eraser's mask
+    [...sc.content.childNodes].forEach(n => { if (n !== old) old.appendChild(n); });
+    const a = S(at), D = S(dur);
+    tl.fromTo(mp, { attr: { 'stroke-dashoffset': len } }, { attr: { 'stroke-dashoffset': 0 }, duration: D, ease: 'none' }, a);
+    if (residue) {
+      const rs = el('path', { d: roughen(d, pass * 0.12), fill: 'none', stroke: '#E8EDE6', 'stroke-width': pass * 0.7, 'stroke-linecap': 'round', opacity: 0, filter: 'url(#smudge)' }, sc.bg);
+      tl.to(rs, { attr: { opacity: 0.055 }, duration: D }, a);
+    }
+    strokes.push({ kind: 'path', node: mp, start: a, dur: D, color: null, tool: 'eraser',
+      point: tt => { const q = mp.getPointAtLength(len * Math.min(1, Math.max(0, (tt - a) / D))); return toRoot(sc.content, q.x, q.y); } });
+    if (sound) sfx('erase', at, { dur });
+    return old;
+  }
 
   /* ---------- motivated transitions: each returns the new time cursor ---------- */
   const TR = {
@@ -647,6 +862,21 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
       tl.set(f, { on: 0 }, S(at + 0.5));
       return at + 0.5;
     },
+    // classroom sliding boards: the next board slides in from the side on its rail, pushing the old one out
+    boardSlide(from, to, t, { dir = 1 } = {}) {
+      t = align(t, 0.55); const at = t, D = 0.7, t0 = S(at), t1 = S(at + D);
+      const k = { u: 0 };
+      tl.to(k, { u: 1, duration: S(D), ease: 'power3.inOut' }, t0);
+      show(to, at);
+      updaters.push(T => {
+        if (T < t0 || T > t1 + 0.05) { if (T > t1) { from.inner.removeAttribute('transform'); to.inner.removeAttribute('transform'); } return; }
+        const off = k.u * W * dir;
+        from.inner.setAttribute('transform', `translate(${(-off).toFixed(1)} 0)`);
+        to.inner.setAttribute('transform', `translate(${(W * dir - off).toFixed(1)} 0)`);
+      });
+      sfx('whoosh', at); sfx('thud', at + D - 0.05, { gain: 0.5 }); hide(from, at + D);
+      return at + D;
+    },
     // warm white flash
     flash(from, to, t) {
       t = align(t, 0.25); const at = t, fl = document.getElementById('flash');
@@ -694,25 +924,99 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     return at + 6.2;
   }
 
-  /* ---------- tools follow whichever stroke is being drawn ---------- */
+  /* ---------- the hand (or tool) follows whichever stroke is being drawn ---------- */
+  // between strokes it lifts and travels; with nothing to draw soon it leaves frame to the lower right
+  const TRAVEL = 0.8, ENTER = 0.3;
+  const offFrame = q => ({ x: q.x + Hh * 0.33, y: q.y + Hh * 0.55 });
+  const ease2 = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  function toolState(tt) {
+    let cur = null;
+    for (const st of strokes) if (st.tool && tt >= st.start && tt < st.start + st.dur) cur = st;
+    if (cur) { const p = cur.point(tt); return { st: cur, x: p.x, y: p.y, lift: p.lift || 0 }; }
+    let prev = null, next = null;
+    for (const st of strokes) {
+      if (!st.tool) continue;
+      const e = st.start + st.dur;
+      if (e <= tt && (!prev || e > prev.start + prev.dur)) prev = st;
+      if (st.start > tt && (!next || st.start < next.start)) next = st;
+    }
+    const pe = prev && prev.start + prev.dur;
+    if (prev && next && next.tool === prev.tool && next.start - pe < TRAVEL) {
+      const u = (tt - pe) / (next.start - pe), A = prev.point(pe - 1e-4), B = next.point(next.start), e = ease2(u);
+      return { st: next, x: A.x + (B.x - A.x) * e, y: A.y + (B.y - A.y) * e, lift: Math.sin(Math.PI * u) };
+    }
+    if (prev && tt - pe < ENTER) { const A = prev.point(pe - 1e-4), O = offFrame(A), e = ease2((tt - pe) / ENTER); return { st: prev, x: A.x + (O.x - A.x) * e, y: A.y + (O.y - A.y) * e, lift: 1 }; }
+    if (next && next.start - tt < ENTER) { const B = next.point(next.start), O = offFrame(B), e = ease2(1 - (next.start - tt) / ENTER); return { st: next, x: O.x + (B.x - O.x) * e, y: O.y + (B.y - O.y) * e, lift: 1 }; }
+    return null;
+  }
   function placeTools(tt) {
-    let s = null;
-    for (const st of strokes) if (st.tool && tt >= st.start && tt < st.start + st.dur) s = st;
     for (const k in toolEls) toolEls[k].setAttribute('visibility', 'hidden');
+    const s = toolState(tt);
     if (!s) return;
-    const p = (tt - s.start) / s.dur;
-    let pt;
-    if (s.kind === 'path') { const q = s.node.getPointAtLength(s.node._len * s.ease(p)); pt = toRoot(s.node, q.x, q.y); }
-    else { const b = s.node._b; pt = toRoot(s.node, b.x + b.width * p, b.y + b.height * (0.62 + 0.14 * Math.sin(tt * 38))); }
-    const te = toolEls[s.tool];
-    if (s.tool === 'marker') te.querySelectorAll('.tip').forEach(n => n.setAttribute('fill', s.color));
-    te.setAttribute('transform', `translate(${pt.x.toFixed(1)},${pt.y.toFixed(1)})`);
+    const te = toolEls[s.st.tool] || toolEls.marker;
+    if (s.st.tool === 'marker' && s.st.color) te.querySelectorAll('.tip').forEach(n => n.setAttribute('fill', s.st.color));
+    if (HAND) {
+      // the wrist pivots a little as the hand moves across the board; lifting raises it off the surface
+      const rot = HAND.angle + (s.x / W - 0.5) * -10 + Math.sin(tt * 9) * 0.8 * (1 - s.lift);
+      const sc = HAND.scale * (1 + 0.035 * s.lift);
+      te.setAttribute('transform', `translate(${(s.x + s.lift * 8).toFixed(1)},${(s.y - s.lift * 14).toFixed(1)}) rotate(${rot.toFixed(2)}) scale(${sc.toFixed(4)})`);
+    } else te.setAttribute('transform', `translate(${s.x.toFixed(1)},${s.y.toFixed(1)})`);
     te.setAttribute('visibility', 'visible');
+  }
+
+  /* ---------- narration: word cues + karaoke captions ---------- */
+  const norm = w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ%$]/g, '');
+  const seg = id => { const g = VO?.scenes?.[id]; if (!g) { console.warn('no narration for scene', id); return { start: 0, end: 0, words: [] }; } return g; };
+  // cue('s3', 'interés') → second when that word starts (n = which occurrence; end: true → when it ends). Also cue('s3', 4) by index.
+  function cue(id, word, { n = 1, end = false } = {}) {
+    const g = seg(id), ws = g.words || [];
+    let hit = null;
+    if (typeof word === 'number') hit = ws[Math.max(0, Math.min(ws.length - 1, word))];
+    else {
+      const q = String(word).split(/\s+/).map(norm).filter(Boolean); let c = 0;
+      for (let i = 0; i <= ws.length - q.length && !hit; i++) if (q.every((qq, j) => norm(ws[i + j].w).startsWith(qq)) && ++c === n) hit = end ? ws[i + q.length - 1] : ws[i];
+    }
+    if (!hit) { console.warn(`cue: "${word}" not found in ${id}`); return g.start; }
+    return end ? hit.e : hit.s;
+  }
+  function captions() {
+    const C = cfg.captions === undefined ? 'karaoke' : cfg.captions;
+    if (!VO || !C) return;
+    const o = Object.assign({ y: W < Hh ? Hh * 0.82 : Hh * 0.87, size: W < Hh ? 64 : 52, color: '#FFFFFF', hi: '#FFD23F', stroke: '#1B1512', maxChars: W < Hh ? 22 : 38, font: 'Kalam' }, typeof C === 'object' ? C : {});
+    const layer = document.getElementById('captions'), chunks = [];
+    for (const id of VO.order || Object.keys(VO.scenes)) {
+      let cur = [];
+      const flush = () => { if (cur.length) chunks.push(cur); cur = []; };
+      for (const w of VO.scenes[id].words || []) {
+        const len = cur.reduce((s, x) => s + x.w.length + 1, 0);
+        if (cur.length && (len + w.w.length > o.maxChars || w.s - cur[cur.length - 1].e > 0.4)) flush();
+        cur.push(w);
+        if (/[.!?;:,]$/.test(w.w) && len > o.maxChars * 0.45) flush();
+      }
+      flush();
+    }
+    let prevE = -1;
+    const els = chunks.map((ch, i) => {
+      const t = el('text', { x: CX, y: o.y, 'text-anchor': 'middle', 'font-size': o.size, 'font-family': o.font, 'font-weight': 700, fill: o.color, stroke: o.stroke, 'stroke-width': o.size * 0.16, 'paint-order': 'stroke', 'stroke-linejoin': 'round', visibility: 'hidden' }, layer);
+      const spans = ch.map((w, j) => { const sp = el('tspan', {}, t); sp.textContent = (j ? ' ' : '') + w.w; return sp; });
+      const nextS = chunks[i + 1] ? chunks[i + 1][0].s : Infinity;
+      const c = { t, spans, ch, s: Math.max(ch[0].s - 0.05, prevE), e: Math.min(ch[ch.length - 1].e + 0.5, nextS - 0.06) };
+      prevE = c.e;
+      return c;
+    });
+    if (o.style === 'simple') o.hi = o.color;
+    updaters.push(T => els.forEach(c => {
+      const on = T >= c.s && T < c.e;
+      c.t.setAttribute('visibility', on ? 'visible' : 'hidden');
+      if (on) c.spans.forEach((sp, j) => sp.setAttribute('fill', T >= c.ch[j].s && T < (c.ch[j + 1]?.s ?? c.ch[j].e + 0.3) ? o.hi : o.color));
+    }));
   }
 
   const V = {
     W, Hh, CX, CY, PAL, INK, H, S, tl, BEAT, MODE, defs, screen: screenL,
-    el, P, done, draw, T, write, pop, popIn, type, comic, stamp, stampFx, wobble, specks, mover, jump, bubble, image, sfx, align,
+    el, P, done, draw, T, write, ink, erase, roughen, VO, cue, seg,
+    // keep content inside SAFE (phone UI covers the edges; karaoke captions own the band below SAFE.bottom)
+    SAFE: { top: 250, bottom: VO && cfg.captions !== false ? Math.round((W < Hh ? Hh * 0.82 : Hh * 0.87) - (W < Hh ? 90 : 70)) : Hh - 270, left: 60, right: W - 60 }, pop, popIn, type, comic, stamp, stampFx, wobble, specks, mover, jump, bubble, image, sfx, align,
     face, emote, arms, wave, blink, wink, hop, wiggle, take,
     mascot, drawMascot, popMascot, person, drawPerson, popPerson,
     newScene, show, hide, camZ, BG, TR, finale, addHatch,
@@ -720,6 +1024,7 @@ window.bootVideo = async function bootVideo(build, cfg = {}) {
     onFrame: fn => updaters.push(fn),
   };
   const end = await build(V);
+  captions();
   tl.to({}, { duration: 0.01 }, S(end ?? 0));
 
   function renderAt(tt) { tl.seek(tt, true); updaters.forEach(f => f(tt)); placeTools(tt); }

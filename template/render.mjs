@@ -12,15 +12,26 @@ import { extname, join } from 'node:path';
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const out = args[0] && !args[0].startsWith('--') ? args[0] : null;
-const fps = Number(opt('--fps', 30)), mode = opt('--mode', 'A');
+const fps = Number(opt('--fps', 30)), mode = opt('--mode', 'A');   // narration (audio/vo.json) always disables beat snapping
 const root = process.cwd();
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' };
 const server = createServer(async (req, res) => {
   try { const p = join(root, decodeURIComponent(req.url.split('?')[0])); const data = await readFile(p); res.writeHead(200, { 'content-type': types[extname(p)] || 'application/octet-stream' }); res.end(data); }
   catch { res.writeHead(404); res.end(); }
 }).listen(0);
-const launch = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {};
-const browser = await chromium.launch(launch);
+// CHROME_PATH, else Playwright's own Chromium, else any Chromium already downloaded (survives version mismatches)
+async function launch() {
+  if (process.env.CHROME_PATH) return chromium.launch({ executablePath: process.env.CHROME_PATH });
+  try { return await chromium.launch(); } catch (e) {
+    const { readdirSync, existsSync } = await import('node:fs');
+    const base = process.env.PLAYWRIGHT_BROWSERS_PATH || join(process.env.HOME || '', process.platform === 'darwin' ? 'Library/Caches/ms-playwright' : '.cache/ms-playwright');
+    for (const d of (existsSync(base) ? readdirSync(base) : []).sort().reverse())
+      for (const sub of ['chrome-linux/chrome', 'chrome-linux64/chrome', 'chrome-mac/Chromium.app/Contents/MacOS/Chromium', 'chrome-win/chrome.exe', 'chrome-headless-shell-linux64/chrome-headless-shell'])
+        if (existsSync(join(base, d, sub))) return chromium.launch({ executablePath: join(base, d, sub) });
+    throw e;
+  }
+}
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('PAGE ERROR', e.message));
 await page.goto(`http://localhost:${server.address().port}/index.html?render=1&mode=${mode}`);

@@ -30,3 +30,10 @@ Nivel del video: `style`, `format` ('16:9' | '9:16'), `fps` (30), `person` ({pho
 
 ## Ejemplo de estructura (45 s)
 hook 4.5 · statement 3 · compare 5 · list 5 · stat 4 · media 4.5 · quote 4 · steps 5 · chapter 3 · cta 4.5
+
+## Narración con voz generada (edge-tts)
+1. Escribe `say` en cada escena (las que no tengan `say` quedan como silencio de su `dur`). Voz y velocidad a nivel del video: `voice: 'es-PE-AlexNeural'`, `rate: '+5%'`, `voGap: 0.6`.
+2. `node guion.mjs && python3 tts.py guion.json` → `audio/vo.wav` + `audio/vo.json`.
+3. Al cargar, `main.js` ajusta cada `dur` a su frase (el `dur` que escribiste queda como mínimo), saca los subtítulos de los tiempos reales de cada palabra y apaga el corte al beat. `./build.sh` mezcla la voz y baja la música mientras se habla.
+4. Si cambias un `say`, vuelve a correr el paso 2. `narration: false` en video.js ignora la voz.
+Guía para escribir lo que se dice: `references/narracion.md`.
